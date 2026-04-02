@@ -1,0 +1,9 @@
+# Data
+data/
+
+# Markdown files
+*.md
+
+# Logs and temp files
+LOG_tmp.html
+*.log
