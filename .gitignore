@@ -7,3 +7,9 @@ data/
 # Logs and temp files
 LOG_tmp.html
 *.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
