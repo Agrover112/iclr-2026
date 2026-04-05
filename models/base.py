@@ -98,7 +98,7 @@ class ResidualModel(nn.Module):
 
         Returns absolute velocity: (batch, 5, N, 3)
         """
-        if point_features is None:
+        if point_features is None: # Compute features on the fly (inference)
             point_features = self._compute_batch_features(pos, idcs_airfoil)
 
         delta = self._predict_delta(t, pos, idcs_airfoil, velocity_in, point_features)
