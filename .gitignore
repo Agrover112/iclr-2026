@@ -1,12 +1,19 @@
 # Data
 data/
+figures/
+results/
+configs/
 
 # Markdown files
 *.md
 
 # Logs and temp files
 LOG_tmp.html
+LOG.html
 *.log
+
+# Generated artifacts
+split.json
 
 # Python cache
 __pycache__/

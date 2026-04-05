@@ -1,6 +1,9 @@
 import torch
 
-from models import MLP as Model
+from models import MLP, ResidualMLP
+
+# Select which model to test — change this line to switch
+Model = ResidualMLP
 
 # The model constructor has to be callable without arguments
 model = Model()
