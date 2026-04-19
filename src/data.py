@@ -24,7 +24,7 @@ class GRAMDataset(Dataset):
     """PyTorch Dataset for GRaM competition data."""
 
     def __init__(self, file_paths: List[str], features: Optional[List[str]] = None,
-                 max_distance: float = 0.0):
+                 max_distance: float = 0.0, log_udf: bool = False):
         """
         Initialize dataset with list of .npz file paths.
 
@@ -37,10 +37,16 @@ class GRAMDataset(Dataset):
             max_distance: If > 0, filter out points whose UDF to the airfoil
                           exceeds this value. Airfoil points are always kept.
                           0 = no filtering (default).
+            log_udf:      If True, replace the udf_truncated channel with
+                          log(udf + 1e-4), renormalized to [0, 1]. Runtime
+                          transform — no cache change. Motivated by law-of-the-wall
+                          (u+ ∝ log(y+)): gives the decoder log-scale resolution
+                          in the viscous sublayer where magnitude error is largest.
         """
         self.file_paths = file_paths
         self.features = features or []
         self.max_distance = max_distance
+        self.log_udf = log_udf
 
     def __len__(self) -> int:
         return len(self.file_paths)
@@ -63,17 +69,36 @@ class GRAMDataset(Dataset):
 
         # Load precomputed features from cache if requested
         point_features = None
+        knn_graph = None
         if self.features:
+            from src.features import GRAPH_FEATURES
             cache_path = feat_cache_path(self.file_paths[idx])
             if os.path.exists(cache_path):
                 cached = torch.load(cache_path, weights_only=True)
-                parts = []
+                float_parts = []
+                udf_slice = None   # (start, end) in point_features if log_udf active
+                col = 0
                 for name in self.features:
-                    f = cached[name]
-                    if f.dim() == 1:
-                        f = f.unsqueeze(1)
-                    parts.append(f)
-                point_features = torch.cat(parts, dim=1)
+                    if name not in cached:
+                        continue  # feature missing from cache — will be computed on-the-fly
+                    if name in GRAPH_FEATURES:
+                        knn_graph = cached[name].long()  # (N, k) int64 indices; -1 = unused
+                    else:
+                        f = cached[name]
+                        if f.dim() == 1:
+                            f = f.unsqueeze(1)
+                        if self.log_udf and name == "udf_truncated":
+                            udf_slice = (col, col + f.shape[1])
+                        col += f.shape[1]
+                        float_parts.append(f)
+                if float_parts:
+                    point_features = torch.cat(float_parts, dim=1)
+                    if udf_slice is not None:
+                        import math
+                        s, e = udf_slice
+                        log_d = torch.log(point_features[:, s:e] + 1e-4)
+                        lo, hi = math.log(1e-4), math.log(0.5 + 1e-4)
+                        point_features[:, s:e] = (log_d - lo) / (hi - lo)
 
         # Filter distant points if max_distance is set
         if self.max_distance > 0:
@@ -93,6 +118,15 @@ class GRAMDataset(Dataset):
             velocity_out = velocity_out[:, keep]
             if point_features is not None:
                 point_features = point_features[keep]
+            if knn_graph is not None:
+                # Remap neighbor indices to new point positions after filtering.
+                # -1 entries (adaptive_knn_graph padding) map to -1 via the sentinel below.
+                old_to_new_knn = torch.full((keep.shape[0],), -1, dtype=torch.long)
+                old_to_new_knn[keep] = torch.arange(keep.sum())
+                trimmed = knn_graph[keep]                         # (N_keep, k)
+                valid = trimmed >= 0
+                remapped = torch.where(valid, old_to_new_knn[trimmed.clamp(min=0)], trimmed)
+                knn_graph = remapped                              # (N_keep, k), -1 preserved
 
             # Remap airfoil indices to new positions
             old_to_new = torch.full((keep.shape[0],), -1, dtype=torch.long)
@@ -109,6 +143,8 @@ class GRAMDataset(Dataset):
         }
         if point_features is not None:
             sample['point_features'] = point_features
+        if knn_graph is not None:
+            sample['knn_graph'] = knn_graph
 
         return sample
 

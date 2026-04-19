@@ -11,6 +11,10 @@ Plus tests for the residual prediction pattern:
   5. Residual model output is absolute, not delta
   6. Adding last frame back gives correct absolute values
 
+Plus GPU device placement tests:
+  7. Model parameters land on CUDA after .to(device)
+  8. run_split passes GPU tensors into model.forward()
+
 Run with:
   uv run --project /home/agrov/gram/ pytest tests/test_model_interface.py -v
 """
@@ -304,3 +308,93 @@ class TestCompetitionMetric:
         assert oracle_metric < naive_metric, (
             f"Oracle residual ({oracle_metric:.4f}) must beat naive ({naive_metric:.4f})"
         )
+
+
+# ---------------------------------------------------------------------------
+# 6. GPU device placement
+# ---------------------------------------------------------------------------
+
+pytest_plugins = []  # ensure pytest is importable at module level
+
+import pytest  # noqa: E402 (already imported above implicitly via pytest runner)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+class TestGPUPlacement:
+    """Verify that model parameters and batch tensors are correctly moved to GPU."""
+
+    def _small_inputs(self, device, n=512):
+        """Tiny inputs (n=512 points) so the test runs fast on any GPU."""
+        torch.manual_seed(0)
+        t            = torch.rand(1, 10, device=device)
+        pos          = torch.rand(1, n, 3, device=device)
+        idcs_airfoil = [torch.randint(n, (50,), device=device)]
+        velocity_in  = torch.rand(1, 5, n, 3, device=device)
+        velocity_out = torch.rand(1, 5, n, 3, device=device)
+        return t, pos, idcs_airfoil, velocity_in, velocity_out
+
+    def test_model_parameters_on_cuda_after_to_device(self):
+        """After model.to(device), every parameter must live on CUDA."""
+        import torch.nn as nn
+        device = torch.device("cuda")
+
+        model = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 4))
+        model = model.to(device)
+
+        for name, param in model.named_parameters():
+            assert param.device.type == "cuda", (
+                f"Parameter '{name}' is on {param.device}, expected cuda"
+            )
+
+    def test_run_split_passes_gpu_tensors_to_model(self):
+        """
+        run_split must move batch tensors to GPU before calling model.forward().
+        We capture the device of every tensor the model receives via a spy model.
+        """
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+        from src.train import run_split
+
+        device = torch.device("cuda")
+        n = 512  # small point cloud for speed
+
+        # Spy model: records device of each input tensor, returns zeros.
+        observed_devices = {}
+
+        class SpyModel(nn.Module):
+            def forward(self, t, pos, idcs_airfoil, velocity_in,
+                        point_features=None, knn_graph=None):
+                observed_devices["t"]           = t.device.type
+                observed_devices["pos"]         = pos.device.type
+                observed_devices["velocity_in"] = velocity_in.device.type
+                observed_devices["idcs_0"]      = idcs_airfoil[0].device.type
+                if point_features is not None:
+                    observed_devices["point_features"] = point_features.device.type
+                if knn_graph is not None:
+                    observed_devices["knn_graph"] = knn_graph.device.type
+                return torch.zeros(1, 5, n, 3, device=t.device)
+
+        model = SpyModel().to(device)
+
+        # Build a minimal DataLoader that yields one batch of CPU tensors.
+        # (DataLoader always yields CPU tensors unless pin_memory + to() is used.)
+        from src.train import collate_fn
+
+        batch = [{
+            "t":            torch.rand(10),
+            "pos":          torch.rand(n, 3),
+            "idcs_airfoil": torch.randint(n, (50,)),
+            "velocity_in":  torch.rand(5, n, 3),
+            "velocity_out": torch.rand(5, n, 3),
+            "point_features": torch.rand(n, 2),
+            "knn_graph":    torch.randint(n, (n, 4)),
+        }]
+        loader = DataLoader(batch, batch_size=1, collate_fn=collate_fn)
+
+        run_split(model, loader, device=device)
+
+        for key, dev in observed_devices.items():
+            assert dev == "cuda", (
+                f"Tensor '{key}' was on '{dev}' inside model.forward() — "
+                "run_split failed to move it to GPU"
+            )

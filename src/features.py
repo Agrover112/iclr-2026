@@ -11,6 +11,7 @@ Used by:
 
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -64,6 +65,62 @@ def _chunked_nearest_surface_pt(pts: torch.Tensor, surface_pts: torch.Tensor) ->
 # Each takes (pos: Tensor (N,3), surface_pts: Tensor (M,3)) → Tensor
 # ─────────────────────────────────────────────────────────────────
 
+def compute_knn_graph(pos: torch.Tensor, surface_pts: torch.Tensor, k: int = 16) -> torch.Tensor:
+    """k-NN graph edges for each point: indices of k nearest neighbors.
+
+    surface_pts is unused but accepted to match the feature function signature.
+
+    Used by GNN models. Cached offline via precompute_features.py;
+    computed on the fly at inference time from pos.
+
+    Returns (N, k) int64 — neighbor indices into pos.
+    """
+    from scipy.spatial import cKDTree
+    pos_np = pos.detach().cpu().numpy()
+    tree = cKDTree(pos_np)
+    _, idx = tree.query(pos_np, k=k + 1)  # k+1 includes self
+    return torch.from_numpy(idx[:, 1:]).long()  # (N, k) — exclude self
+
+
+def compute_adaptive_knn_graph(
+    pos: torch.Tensor,
+    surface_pts: torch.Tensor,
+    k_near: int = 32,
+    k_far: int = 8,
+    sigma: float = 0.05,
+) -> torch.Tensor:
+    """Adaptive k-NN graph: near-surface points get k_near neighbors, far-field get k_far.
+
+    Rule:  k(d) = k_far + (k_near - k_far) * exp(-d / sigma)
+    where  d = UDF (distance to nearest airfoil surface point).
+
+    σ = 0.05 is anchored to d = 0.1 (the empirical error-threshold from LOG.md):
+      d=0.00 → k=32  (surface, max density)
+      d=0.05 → k≈17  (boundary layer interior, 1/e point)
+      d=0.10 → k≈11  (error threshold, already declining)
+      d=0.20 → k≈8   (far field, at k_far)
+
+    Returns (N, k_near) int64 — neighbor indices, unused slots padded with -1.
+    """
+    from scipy.spatial import cKDTree
+
+    pos_cpu = pos.detach().cpu()
+    surface_pts_cpu = surface_pts.detach().cpu()
+    udf = _chunked_min_dist(pos_cpu, surface_pts_cpu).numpy()  # (N,)
+    k_float = k_far + (k_near - k_far) * np.exp(-udf / sigma)
+    k_vals = np.maximum(k_far, np.round(k_float).astype(int))  # (N,)
+
+    tree = cKDTree(pos_cpu.numpy())
+    _, nbrs_all = tree.query(pos_cpu.numpy(), k=k_near + 1)    # (N, k_near+1)
+    nbrs_all = nbrs_all[:, 1:]                                  # drop self → (N, k_near)
+
+    knn = np.full((len(pos), k_near), -1, dtype=np.int64)
+    for i, ki in enumerate(k_vals):
+        knn[i, :ki] = nbrs_all[i, :ki]
+
+    return torch.from_numpy(knn).long()                        # (N, k_near)
+
+
 def compute_local_density(pos: torch.Tensor, surface_pts: torch.Tensor, k: int = 8) -> torch.Tensor:
     """Local point density: distance to k-th nearest neighbor.
 
@@ -73,8 +130,9 @@ def compute_local_density(pos: torch.Tensor, surface_pts: torch.Tensor, k: int =
     Returns (N, 1) float32.
     """
     from scipy.spatial import cKDTree
-    tree = cKDTree(pos.numpy())
-    dists, _ = tree.query(pos.numpy(), k=k + 1)
+    pos_np = pos.detach().cpu().numpy()
+    tree = cKDTree(pos_np)
+    dists, _ = tree.query(pos_np, k=k + 1)
     return torch.from_numpy(dists[:, k]).float().unsqueeze(1)
 
 
@@ -123,19 +181,28 @@ def compute_udf_gradient(pos: torch.Tensor, surface_pts: torch.Tensor) -> torch.
 # ─────────────────────────────────────────────────────────────────
 
 FEATURE_REGISTRY: dict[str, callable] = {
-    "udf":            compute_udf,            # (N, 1)
-    "udf_truncated":  compute_udf_truncated,  # (N, 1)
-    "udf_gradient":   compute_udf_gradient,   # (N, 3)
-    "local_density":  compute_local_density,   # (N, 1)
+    "udf":                  compute_udf,                  # (N, 1)
+    "udf_truncated":        compute_udf_truncated,        # (N, 1)
+    "udf_gradient":         compute_udf_gradient,         # (N, 3)
+    "local_density":        compute_local_density,        # (N, 1)
+    "knn_graph":            compute_knn_graph,            # (N, k)   — uniform k
+    "adaptive_knn_graph":   compute_adaptive_knn_graph,   # (N, k_near) — distance-weighted k, -1 padded
 }
 
-# Feature output dimensions (number of channels per feature)
+# Feature output dimensions (number of channels per feature).
+# Graph features (knn_graph, adaptive_knn_graph) store indices, not float channels;
+# GNN models extract them separately and do not concatenate them as input features.
 FEATURE_DIMS: dict[str, int] = {
-    "udf":            1,
-    "udf_truncated":  1,
-    "udf_gradient":   3,
-    "local_density":  1,
+    "udf":                1,
+    "udf_truncated":      1,
+    "udf_gradient":       3,
+    "local_density":      1,
+    "knn_graph":          0,   # indices only
+    "adaptive_knn_graph": 0,   # indices only (-1 = unused slot)
 }
+
+# Feature names that represent graph topology (neighbor indices), not float channels.
+GRAPH_FEATURES: frozenset[str] = frozenset({"knn_graph", "adaptive_knn_graph"})
 
 
 def compute_point_features(

@@ -14,6 +14,7 @@ Output per point:
     (base class adds velocity_in[:, -1:] → absolute velocity)
 """
 
+import math
 import os
 
 import torch
@@ -72,17 +73,22 @@ class ResidualMLP(ResidualModel):
             # Otherwise keep freshly initialized weights
 
     def _init_weights(self):
-        """Initialize final layer to zero so model starts as naive baseline."""
+        """Kaiming init scaled by depth to prevent gradient vanishing in deep MLPs."""
+        depth = len(self.linears)
+        depth_scale = 1.0 / math.sqrt(depth) if depth > 1 else 1.0
+
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
+                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
+                m.weight.data *= depth_scale
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
+
         # Zero out final layer → delta = 0 at init → output = last input frame
         nn.init.zeros_(self.linears[-1].weight)
         nn.init.zeros_(self.linears[-1].bias)
 
-    def _predict_delta(self, t, pos, idcs_airfoil, velocity_in, point_features):
+    def _predict_delta(self, t, pos, idcs_airfoil, velocity_in, point_features, knn_graph=None):
         """Run MLP, predict velocity delta.
 
         Args:

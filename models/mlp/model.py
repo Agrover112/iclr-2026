@@ -1,7 +1,9 @@
+import math
 import os
 
 import torch
 from torch.nn import Dropout, Identity, LayerNorm, Linear, Module, ReLU
+import torch.nn as nn
 
 
 class MLP(Module):
@@ -28,10 +30,26 @@ class MLP(Module):
 
         self.dropout = Dropout(self.dropout_probability)
 
+        # Initialize with Kaiming scaled by depth
+        self._init_weights()
+
         # Load random weights, just for demonstration
         path_state_dict = os.path.join("models", "mlp", "state_dict.pt")
-        state_dict = torch.load(path_state_dict)
-        self.load_state_dict(state_dict)
+        if os.path.exists(path_state_dict):
+            state_dict = torch.load(path_state_dict)
+            self.load_state_dict(state_dict)
+
+    def _init_weights(self):
+        """Kaiming init scaled by depth."""
+        depth = len(self.linears)
+        depth_scale = 1.0 / math.sqrt(depth) if depth > 1 else 1.0
+
+        for m in self.modules():
+            if isinstance(m, Linear):
+                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
+                m.weight.data *= depth_scale
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def forward(
         self,
