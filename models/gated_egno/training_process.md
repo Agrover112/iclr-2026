@@ -216,6 +216,78 @@ the full split above using a single NVIDIA B200 (180 GB HBM3), also
 provisioned via Modal. The submission run converged in approximately
 seven wall-clock hours at a cost of roughly USD 45.
 
+## Reproducibility
+
+Running inference is self-contained — nothing external needs to be
+downloaded. From the repository root:
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+`main.py` instantiates `GatedEGNOMeanResModel`, which auto-loads
+`models/gated_egno/state_dict.pt` during construction, and runs a
+forward pass on a dummy batch to confirm the output shape.
+
+**Features computed inline.** UDF, UDF gradient, and the k-NN graph
+are recomputed from `(pos, idcs_airfoil)` on every forward pass. There
+are no precomputed cache files to ship.
+
+**Dependencies** (see `requirements.txt`):
+
+- `torch >= 2.0`
+- `numpy >= 1.20`
+- `scipy >= 1.10` (only `scipy.spatial.cKDTree` is used, on CPU)
+- `torch_scatter >= 2.1`
+- `neuraloperator >= 1.0` (for `SpectralConv`)
+
+**Hardware expectations.** The model has ~360k parameters and a
+state-dict of ~1.8 MB. Inference runs on both CPU and GPU:
+
+- L4 / L40S / A100 / B200: ~2–3 seconds per sample (batch = 1),
+  ~3 GB peak VRAM.
+- CPU only: ~40 seconds per sample, ~4 GB RAM. The
+  `scipy.spatial.cKDTree` step always runs on CPU regardless of the
+  device used for the rest of the forward pass.
+
+**Determinism.** Inference is deterministic given fixed inputs: the
+k-NN graph from `cKDTree` is stable, `torch.cdist` is deterministic
+on CPU, and `torch.fft` is deterministic on both CPU and CUDA.
+Training was performed with `seed = 42`; no ensembling or
+dropout-based test-time randomness is used.
+
+## Limitations
+
+A few honest caveats for anyone reading the code:
+
+- **`udf_gradient` direction unused.** The unit normal $\hat{n}(x_i)$
+  enters the encoder only through its magnitude (which is constantly 1),
+  so the directional signal is available but not exploited. A natural
+  extension would be to project it onto the edge direction inside each
+  message (analogous to how we handle velocity).
+- **Fixed 5-frame horizon.** The model is trained to predict exactly
+  five output frames from five input frames. Extending beyond five
+  steps would require either an autoregressive rollout (which drifts
+  on wake dynamics, as we observed) or a different positional-encoding
+  scheme for longer time axes.
+- **Noisy validation on the final split.** The submission run uses a
+  95% / 2.5% / 2.5% split — only 4 simulations each for validation and
+  test. Per-epoch val metric is therefore a noisy signal, and early
+  stopping is based on a fairly high-variance estimate.
+- **Wake-region error dominates.** The spectral temporal mixing helps
+  but does not fully capture the chaotic high-frequency fluctuations
+  in the near-wake and boundary layer, which remain the main
+  contributor to the prediction error.
+- **Positional encodings are temporal only.** We use sinusoidal
+  positional encodings on the frame index but no spatial positional
+  encoding on $x_i$. Spatial coordinates enter the network only
+  through relative edge vectors $x_j - x_i$ and UDF-based scalar
+  features. Richer spatial encodings — Fourier features / random
+  Fourier features, or rotary
+  position encodings on the edge directions — could give the model more resolution on high-frequency spatial structure (e.g. boundary-
+  layer thickness) and are a natural next experiment.
+
 ## Acknowledgements
 
 We gratefully acknowledge Modal for the GPU credits that made this
