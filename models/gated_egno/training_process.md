@@ -49,7 +49,7 @@ components in sequence, followed by a shared decoder:
   $W^{(k)}$ the learnable per-mode weight. The update is
 
 $$
-h' = h + \mathrm{LeakyReLU}\Bigl( \mathcal{F}_t^{-1}\bigl( W^{(k)} \hat{h}(k) \bigr) \Bigr), \qquad k \in \mathcal{K}
+h' = h + \mathrm{LeakyReLU}( \mathcal{F}_t^{-1}( W^{(k)} \hat{h}(k) ) ), \qquad k \in \mathcal{K}
 $$
 
 - **`TimeConvX`** — the same spectral convolution applied
@@ -62,7 +62,7 @@ $$
   per-mode weight,
 
 $$
-v'_{d}(x_i, t) = v_{d}(x_i, t) + \mathcal{F}_t^{-1}\Bigl( \tilde W^{(k)} \hat{v}_d(x_i, k) \Bigr)(t), \qquad k \in \mathcal{K}
+v'_{d}(x_i, t) = v_{d}(x_i, t) + \mathcal{F}_t^{-1}( \tilde W^{(k)} \hat{v}_d(x_i, k) )(t), \qquad k \in \mathcal{K}
 $$
 
   Because the same scalar weights $\tilde W^{(k)}$ are applied to each
@@ -79,10 +79,10 @@ $$
 
 $$
 \begin{aligned}
-m_{ij} &= \phi_e\bigl(h_i^{l}, h_j^{l}, \lVert x_i - x_j \rVert^2, a_{ij}\bigr) && \text{(Eq. 3)} \\\\
-e_{ij} &= \phi_{\mathrm{inf}}(m_{ij}) = \sigma\bigl(\mathrm{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\\\
+m_{ij} &= \phi_e(h_i^{l}, h_j^{l}, \| x_i - x_j \|^2, a_{ij}) && \text{(Eq. 3)} \\\\
+e_{ij} &= \phi_{\mathrm{inf}}(m_{ij}) = \sigma(\mathrm{Linear}(m_{ij})) && \text{(Eq. 8)} \\\\
 m_i &= \sum_{j \in \mathcal{N}(i)} e_{ij} m_{ij} && \text{(Eq. 7)} \\\\
-h_i^{l+1} &= \mathrm{LayerNorm}\bigl(h_i^{l} + \phi_h(h_i^{l}, m_i)\bigr) && \text{(Eq. 6)}
+h_i^{l+1} &= \mathrm{LayerNorm}(h_i^{l} + \phi_h(h_i^{l}, m_i)) && \text{(Eq. 6)}
 \end{aligned}
 $$
 
@@ -130,7 +130,7 @@ then:
   surface point,
 
 $$
-\tilde{d}(x_i) = \min\bigl( \lVert x_i - s^{\star}(x_i) \rVert_2, d_{\max} \bigr), \qquad d_{\max} = 0.5
+\tilde{d}(x_i) = \min( \| x_i - s^{\star}(x_i) \|_2, d_{\max} ), \qquad d_{\max} = 0.5
 $$
 
   Truncation focuses numerical resolution on the boundary layer while
@@ -140,7 +140,7 @@ $$
   nearest surface point,
 
 $$
-\hat{n}(x_i) = \frac{s^{\star}(x_i) - x_i}{\lVert s^{\star}(x_i) - x_i \rVert_2}
+\hat{n}(x_i) = \frac{s^{\star}(x_i) - x_i}{\| s^{\star}(x_i) - x_i \|_2}
 $$
 
   This is $E(n)$-equivariant. In the current encoder the vector enters
@@ -152,7 +152,7 @@ $$
   distance in $\mathbb{R}^3$ with $k = 16$,
 
 $$
-\mathcal{E}(x_i) = \bigl\{ (i, j) : x_j \in \mathrm{kNN}_k(x_i) \bigr\}, \qquad k = 16
+\mathcal{E}(x_i) = \{ (i, j) : x_j \in \mathrm{kNN}_k(x_i) \}, \qquad k = 16
 $$
 
 All three are computed inside `forward` from `(pos, idcs_airfoil)`.
@@ -180,7 +180,9 @@ gives the regressor a cleaner, lower-variance target.
 The training loss is ordinary mean-squared error on the reconstructed
 output,
 
-$$ \mathcal{E}(x_i) = \lbrace (i, j) : x_j \in \mathrm{kNN}_k(x_i) \rbrace, \qquad k = 16$$
+$$
+\mathcal{L} = \frac{1}{T N} \sum_{t=0}^{T-1} \sum_{i=1}^{N} \| \hat{v}_{\mathrm{out}}(x_i, t) - v_{\mathrm{out}}(x_i, t) \|_2^{2},
+$$
 
 where $\hat{v}_{\mathrm{out}}$ is the model's prediction and
 $v_{\mathrm{out}}$ the ground-truth future velocity field.
