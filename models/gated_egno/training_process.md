@@ -48,9 +48,9 @@ components in sequence, followed by a shared decoder:
   maximum for $T = 5$, since $\lfloor T/2 \rfloor + 1 = 3$), and
   $W^{(k)}$ the learnable per-mode weight. The update is
 
-  $$
-  h' = h + \mathrm{LeakyReLU}\left( \mathcal{F}_t^{-1}\left( W^{(k)} \hat{h}(k) \right) \right), \qquad k \in \mathcal{K}.
-  $$
+$$
+h' = h + \mathrm{LeakyReLU}\Bigl( \mathcal{F}_t^{-1}\bigl( W^{(k)} \hat{h}(k) \bigr) \Bigr), \qquad k \in \mathcal{K}
+$$
 
 - **`TimeConvX`** — the same spectral convolution applied
   component-wise to the raw velocity, treating the three spatial
@@ -61,9 +61,9 @@ components in sequence, followed by a shared decoder:
   $v_d(x_i, \cdot)$ at mode $k$, and $\tilde W^{(k)}$ the learnable
   per-mode weight,
 
-  $$
-  v'_{d}(x_i, t) = v_{d}(x_i, t) + \mathcal{F}_t^{-1}\left( \tilde W^{(k)} \hat{v}_d(x_i, k) \right)(t), \qquad k \in \mathcal{K}.
-  $$
+$$
+v'_{d}(x_i, t) = v_{d}(x_i, t) + \mathcal{F}_t^{-1}\Bigl( \tilde W^{(k)} \hat{v}_d(x_i, k) \Bigr)(t), \qquad k \in \mathcal{K}
+$$
 
   Because the same scalar weights $\tilde W^{(k)}$ are applied to each
   spatial component independently, a rotation $R \in O(3)$ of the
@@ -77,14 +77,14 @@ components in sequence, followed by a shared decoder:
   relative geometry and per-endpoint velocity projections, the block
   runs
 
-  $$
-  \begin{aligned}
-  m_{ij}    &= \phi_e\left( h_i^{l}, h_j^{l}, \| x_i - x_j \|^2, a_{ij} \right) && \text{(Eq. 3)} \\
-  e_{ij}    &= \phi_{\mathrm{inf}}(m_{ij}) = \sigma\left( \mathrm{Linear}(m_{ij}) \right) && \text{(Eq. 8)} \\
-  m_i       &= \sum_{j \in \mathcal{N}(i)} e_{ij}  m_{ij} && \text{(Eq. 7)} \\
-  h_i^{l+1} &= \mathrm{LayerNorm}\left( h_i^{l} + \phi_h(h_i^{l}, m_i) \right) && \text{(Eq. 6)}
-  \end{aligned}
-  $$
+$$
+\begin{aligned}
+m_{ij} &= \phi_e\bigl(h_i^{l}, h_j^{l}, \lVert x_i - x_j \rVert^2, a_{ij}\bigr) && \text{(Eq. 3)} \\\\
+e_{ij} &= \phi_{\mathrm{inf}}(m_{ij}) = \sigma\bigl(\mathrm{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\\\
+m_i &= \sum_{j \in \mathcal{N}(i)} e_{ij} m_{ij} && \text{(Eq. 7)} \\\\
+h_i^{l+1} &= \mathrm{LayerNorm}\bigl(h_i^{l} + \phi_h(h_i^{l}, m_i)\bigr) && \text{(Eq. 6)}
+\end{aligned}
+$$
 
   The MLP $\phi_{\mathrm{inf}}$ is what the paper calls the *inferring
   edges* network: originally introduced as a soft indicator of whether
@@ -96,9 +96,9 @@ components in sequence, followed by a shared decoder:
 - **`EquivariantDecoder`** — shared across the four blocks, produces
   the per-point velocity increment from the final hidden state as
 
-  $$
-  \Delta v_i = \sum_{t} \alpha_i^{(t)}  v_i^{(t)} + \sum_{j} w(m_{ij})  (x_j - x_i),
-  $$
+$$
+\Delta v_i = \sum_{t} \alpha_i^{(t)} v_i^{(t)} + \sum_{j} w(m_{ij})(x_j - x_i)
+$$
 
   a weighted combination of the equivariant input frames and relative
   positions with invariant scalar weights — equivariant by construction.
@@ -129,9 +129,9 @@ then:
 - **`udf_truncated`** — truncated unsigned distance to the nearest
   surface point,
 
-  $$
-  \tilde{d}(x_i) = \min\left( \| x_i - s^{\star}(x_i) \|_2, d_{\max} \right), \qquad d_{\max} = 0.5.
-  $$
+$$
+\tilde{d}(x_i) = \min\bigl( \lVert x_i - s^{\star}(x_i) \rVert_2, d_{\max} \bigr), \qquad d_{\max} = 0.5
+$$
 
   Truncation focuses numerical resolution on the boundary layer while
   saturating the far-field to a constant.
@@ -139,9 +139,9 @@ then:
 - **`udf_gradient`** — unit vector pointing from $x_i$ toward its
   nearest surface point,
 
-  $$
-  \hat{n}(x_i) = \frac{s^{\star}(x_i) - x_i}{\| s^{\star}(x_i) - x_i \|_2}.
-  $$
+$$
+\hat{n}(x_i) = \frac{s^{\star}(x_i) - x_i}{\lVert s^{\star}(x_i) - x_i \rVert_2}
+$$
 
   This is $E(n)$-equivariant. In the current encoder the vector enters
   only through its (constant-1) Euclidean norm $\|\hat{n}(x_i)\|_2$,
@@ -151,9 +151,9 @@ then:
 - **k-nearest-neighbour graph** — directed edge set built from Euclidean
   distance in $\mathbb{R}^3$ with $k = 16$,
 
-  $$
-  \mathcal{E}(x_i) = \{ (i, j) : x_j \in \mathrm{kNN}_k(x_i) \}, \qquad k = 16.
-  $$
+$$
+\mathcal{E}(x_i) = \bigl\{ (i, j) : x_j \in \mathrm{kNN}_k(x_i) \bigr\}, \qquad k = 16
+$$
 
 All three are computed inside `forward` from `(pos, idcs_airfoil)`.
 
@@ -180,9 +180,7 @@ gives the regressor a cleaner, lower-variance target.
 The training loss is ordinary mean-squared error on the reconstructed
 output,
 
-$$
-\mathcal{L} = \frac{1}{T N} \sum_{t=0}^{T-1} \sum_{i=1}^{N} \left\| \hat{v}_{\mathrm{out}}(x_i, t) - v_{\mathrm{out}}(x_i, t) \right\|_2^{2},
-$$
+$$ \mathcal{E}(x_i) = \lbrace (i, j) : x_j \in \mathrm{kNN}_k(x_i) \rbrace, \qquad k = 16$$
 
 where $\hat{v}_{\mathrm{out}}$ is the model's prediction and
 $v_{\mathrm{out}}$ the ground-truth future velocity field.
