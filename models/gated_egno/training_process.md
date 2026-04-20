@@ -75,7 +75,7 @@ components in sequence, followed by a shared decoder:
   $$
   \begin{aligned}
   m_{ij}    &\;=\; \phi_e\!\bigl(h_i^{l},\, h_j^{l},\, \lVert x_i - x_j\rVert^2,\, a_{ij}\bigr) && \text{(Eq. 3)} \\
-  e_{ij}    &\;=\; \phi_\text{inf}(m_{ij}) \;=\; \sigma\!\bigl(\text{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\
+  e_{ij}    &\;=\; \phi_{\mathrm{inf}}(m_{ij}) \;=\; \sigma\!\bigl(\mathrm{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\
   m_i       &\;=\; \sum_{j \in \mathcal{N}(i)} e_{ij}\, m_{ij}                             && \text{(Eq. 7)} \\
   h_i^{l+1} &\;=\; \mathrm{LayerNorm}\!\bigl(h_i^{l} + \phi_h(h_i^{l},\, m_i)\bigr)         && \text{(Eq. 6, + residual + norm)}
   \end{aligned}
@@ -110,15 +110,16 @@ autoregressive GNN rollouts drift on chaotic wake dynamics.
 
 ## Input features
 
-Let $\mathcal{S} = \{x_j : j \in \text{idcs\_airfoil}\}$ be the set of
-airfoil-surface points for a given sample, and let
+Let $\mathcal{I}$ denote the set of airfoil-surface indices (the
+`idcs_airfoil` tensor) and $\mathcal{S} = \{x_j : j \in \mathcal{I}\}$
+the corresponding surface points. For every point $x_i$, let
 
 $$
 s^{*}(x_i) \;=\; \arg\min_{s \in \mathcal{S}} \; \lVert x_i - s \rVert_2
 $$
 
-denote the nearest surface point to $x_i$. The per-point geometry
-features are then:
+denote its nearest surface point. The per-point geometry features are
+then:
 
 - **`udf_truncated`** — truncated unsigned distance to the nearest
   surface point,
