@@ -42,13 +42,14 @@ components in sequence, followed by a shared decoder:
 - **`TimeConv`** — a 1-D spectral convolution along the input-time
   axis applied to the scalar hidden channel. Implemented with the
   `neuraloperator` package's **`SpectralConv`** (Li et al., 2021;
-  arXiv:2010.08895). Writing $\mathcal{F}_t$ for the FFT along the
-  time axis, $\mathcal{K} = \{0, 1, 2\}$ for the retained Fourier
-  modes (the maximum for $T = 5$, since $\lfloor T/2 \rfloor + 1 = 3$),
-  and $W^{(k)}$ for the learnable per-mode weight, the update is
+  arXiv:2010.08895). Let $\mathcal{F}_t$ be the FFT along the time
+  axis, $\hat{h}(k) = \mathcal{F}_t(h)(k)$ the $k$-th Fourier
+  coefficient, $\mathcal{K} = \{0, 1, 2\}$ the retained modes (the
+  maximum for $T = 5$, since $\lfloor T/2 \rfloor + 1 = 3$), and
+  $W^{(k)}$ the learnable per-mode weight. The update is
 
   $$
-  h' \;=\; h \;+\; \mathrm{LeakyReLU}\!\Bigl(\mathcal{F}_t^{-1}\bigl\{W^{(k)}\,\mathcal{F}_t[h](k) \cdot \mathbb{1}[k \in \mathcal{K}]\bigr\}\Bigr).
+  h' = h + \mathrm{LeakyReLU}\left( \mathcal{F}_t^{-1}\left( W^{(k)} \hat{h}(k) \right) \right), \qquad k \in \mathcal{K}.
   $$
 
 - **`TimeConvX`** — the same spectral convolution applied
@@ -56,8 +57,12 @@ components in sequence, followed by a shared decoder:
   coordinates $d \in \{1,2,3\}$ as a preserved batch dimension so
   that rotation equivariance is maintained:
 
+  With $\hat{v}_d(x_i, k)$ denoting the temporal Fourier coefficient of
+  $v_d(x_i, \cdot)$ at mode $k$, and $\tilde W^{(k)}$ the learnable
+  per-mode weight,
+
   $$
-  v'_{d}(x_i, t) \;=\; v_{d}(x_i, t) \;+\; \mathcal{F}_t^{-1}\!\bigl\{\tilde W^{(k)}\,\mathcal{F}_t[v_d(x_i, \cdot)](k) \cdot \mathbb{1}[k \in \mathcal{K}]\bigr\}(t).
+  v'_{d}(x_i, t) = v_{d}(x_i, t) + \mathcal{F}_t^{-1}\left( \tilde W^{(k)} \hat{v}_d(x_i, k) \right)(t), \qquad k \in \mathcal{K}.
   $$
 
   Because the same scalar weights $\tilde W^{(k)}$ are applied to each
@@ -74,14 +79,14 @@ components in sequence, followed by a shared decoder:
 
   $$
   \begin{aligned}
-  m_{ij}    &\;=\; \phi_e\!\bigl(h_i^{l},\, h_j^{l},\, \lVert x_i - x_j\rVert^2,\, a_{ij}\bigr) && \text{(Eq. 3)} \\
-  e_{ij}    &\;=\; \phi_{\mathrm{inf}}(m_{ij}) \;=\; \sigma\!\bigl(\mathrm{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\
-  m_i       &\;=\; \sum_{j \in \mathcal{N}(i)} e_{ij}\, m_{ij}                             && \text{(Eq. 7)} \\
-  h_i^{l+1} &\;=\; \mathrm{LayerNorm}\!\bigl(h_i^{l} + \phi_h(h_i^{l},\, m_i)\bigr)         && \text{(Eq. 6, + residual + norm)}
+  m_{ij}    &= \phi_e\left( h_i^{l}, h_j^{l}, \| x_i - x_j \|^2, a_{ij} \right) && \text{(Eq. 3)} \\
+  e_{ij}    &= \phi_{\mathrm{inf}}(m_{ij}) = \sigma\left( \mathrm{Linear}(m_{ij}) \right) && \text{(Eq. 8)} \\
+  m_i       &= \sum_{j \in \mathcal{N}(i)} e_{ij}  m_{ij} && \text{(Eq. 7)} \\
+  h_i^{l+1} &= \mathrm{LayerNorm}\left( h_i^{l} + \phi_h(h_i^{l}, m_i) \right) && \text{(Eq. 6)}
   \end{aligned}
   $$
 
-  The MLP $\phi_\text{inf}$ is what the paper calls the *inferring
+  The MLP $\phi_{\mathrm{inf}}$ is what the paper calls the *inferring
   edges* network: originally introduced as a soft indicator of whether
   an edge should contribute to message passing. Here we keep the k-NN
   topology fixed and instead use $e_{ij}$ as a learned per-edge
@@ -92,7 +97,7 @@ components in sequence, followed by a shared decoder:
   the per-point velocity increment from the final hidden state as
 
   $$
-  \Delta v_i \;=\; \sum_{t} \alpha_i^{(t)}\, v_i^{(t)} \;+\; \sum_{j} w(m_{ij})\,(x_j - x_i),
+  \Delta v_i = \sum_{t} \alpha_i^{(t)}  v_i^{(t)} + \sum_{j} w(m_{ij})  (x_j - x_i),
   $$
 
   a weighted combination of the equivariant input frames and relative
@@ -115,7 +120,7 @@ Let $\mathcal{I}$ denote the set of airfoil-surface indices (the
 the corresponding surface points. For every point $x_i$, let
 
 $$
-s^{*}(x_i) \;=\; \arg\min_{s \in \mathcal{S}} \; \lVert x_i - s \rVert_2
+s^{\star}(x_i) = \arg\min_{s \in \mathcal{S}} \| x_i - s \|_2
 $$
 
 denote its nearest surface point. The per-point geometry features are
@@ -125,8 +130,7 @@ then:
   surface point,
 
   $$
-  \tilde{d}(x_i) \;=\; \min\!\bigl(\lVert x_i - s^{*}(x_i) \rVert_2,\; d_{\max}\bigr),
-  \qquad d_{\max} = 0.5.
+  \tilde{d}(x_i) = \min\left( \| x_i - s^{\star}(x_i) \|_2, d_{\max} \right), \qquad d_{\max} = 0.5.
   $$
 
   Truncation focuses numerical resolution on the boundary layer while
@@ -136,11 +140,11 @@ then:
   nearest surface point,
 
   $$
-  \hat{n}(x_i) \;=\; \frac{s^{*}(x_i) - x_i}{\lVert s^{*}(x_i) - x_i \rVert_2}.
+  \hat{n}(x_i) = \frac{s^{\star}(x_i) - x_i}{\| s^{\star}(x_i) - x_i \|_2}.
   $$
 
   This is $E(n)$-equivariant. In the current encoder the vector enters
-  only through its (constant-1) Euclidean norm $\lVert\hat{n}(x_i)\rVert_2$,
+  only through its (constant-1) Euclidean norm $\|\hat{n}(x_i)\|_2$,
   so the directional information is available to future variants but
   is not actively exploited by this submission.
 
@@ -148,8 +152,7 @@ then:
   distance in $\mathbb{R}^3$ with $k = 16$,
 
   $$
-  \mathcal{E}(x_i) \;=\; \bigl\{(i, j) : x_j \in \mathrm{kNN}_k(x_i)\bigr\},
-  \qquad k = 16.
+  \mathcal{E}(x_i) = \{ (i, j) : x_j \in \mathrm{kNN}_k(x_i) \}, \qquad k = 16.
   $$
 
 All three are computed inside `forward` from `(pos, idcs_airfoil)`.
@@ -159,13 +162,13 @@ All three are computed inside `forward` from `(pos, idcs_airfoil)`.
 The network predicts the temporal-mean residual
 
 $$
-\Delta v(x_i, t) \;=\; v_{\text{out}}(x_i, t) \;-\; \frac{1}{T} \sum_{t'=0}^{T-1} v_{\text{in}}(x_i, t'),
+\Delta v(x_i, t) = v_{\mathrm{out}}(x_i, t) - \frac{1}{T} \sum_{t'=0}^{T-1} v_{\mathrm{in}}(x_i, t'),
 $$
 
 and the output velocity is reconstructed as
 
 $$
-v_{\text{out}}(x_i, t) \;=\; \frac{1}{T} \sum_{t'=0}^{T-1} v_{\text{in}}(x_i, t') \;+\; \Delta v(x_i, t).
+v_{\mathrm{out}}(x_i, t) = \frac{1}{T} \sum_{t'=0}^{T-1} v_{\mathrm{in}}(x_i, t') + \Delta v(x_i, t).
 $$
 
 This Reynolds decomposition (Reynolds 1895) separates the slowly
@@ -178,11 +181,11 @@ The training loss is ordinary mean-squared error on the reconstructed
 output,
 
 $$
-\mathcal{L} \;=\; \frac{1}{T \, N} \sum_{t=0}^{T-1} \sum_{i=1}^{N} \bigl\lVert \hat{v}_{\text{out}}(x_i, t) - v_{\text{out}}(x_i, t) \bigr\rVert_2^{\,2},
+\mathcal{L} = \frac{1}{T N} \sum_{t=0}^{T-1} \sum_{i=1}^{N} \left\| \hat{v}_{\mathrm{out}}(x_i, t) - v_{\mathrm{out}}(x_i, t) \right\|_2^{2},
 $$
 
-where $\hat{v}_{\text{out}}$ is the model's prediction and
-$v_{\text{out}}$ the ground-truth future velocity field.
+where $\hat{v}_{\mathrm{out}}$ is the model's prediction and
+$v_{\mathrm{out}}$ the ground-truth future velocity field.
 
 ## Training
 
