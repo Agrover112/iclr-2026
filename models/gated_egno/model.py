@@ -119,7 +119,12 @@ def compute_features_for_sample(
 # Base EGNN layer + equivariant decoder.
 
 class FixedEGNNLayer(nn.Module):
-    """Invariant h update; all 5 velocity frames enter as edge-projected scalars."""
+    """EGNN layer; 5 velocity frames enter as edge-projected invariant scalars.
+
+    "Fixed": an earlier decoder zero-initialized its 2-layer MLP heads to
+    force Δv = 0 at init, creating a dying-neurons dead zone. Fixed by
+    using PyTorch default init everywhere (see EquivariantDecoder).
+    """
 
     def __init__(self, hidden_dim: int, dropout: float = 0.0,
                  update_coords: bool = False):
@@ -227,6 +232,8 @@ class EquivariantDecoder(nn.Module):
 
     def __init__(self, hidden_dim: int):
         super().__init__()
+        # Default PyTorch init — zero-init on both MLP layers would kill
+        # gradients through the inner layer (see FixedEGNNLayer docstring).
         self.edge_weight = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(),
@@ -253,7 +260,6 @@ class EquivariantDecoder(nn.Module):
 
 # ─────────────────────────────────────────────────────────────────
 # EGNO temporal spectral convolutions + block
-# (from models/gated_egno/model.py)
 # ─────────────────────────────────────────────────────────────────
 
 def sinusoidal_time_embedding(t: Tensor, dim: int) -> Tensor:
