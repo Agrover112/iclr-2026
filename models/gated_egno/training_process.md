@@ -1,4 +1,4 @@
-# Training process
+# gEGNO: Gated Equivariant Graph Neural Operator for Airflow Prediction
 
 ## Overview
 
@@ -291,7 +291,9 @@ A few honest caveats for anyone reading the code:
 ## Acknowledgements
 
 We gratefully acknowledge Modal for the GPU credits that made this
-work possible.
+work possible. We also thank Emanuele D'Allestro for insightful
+discussions on the underlying fluid-dynamics physics, which shaped
+several of the modelling choices described above.
 
 ## References
 
