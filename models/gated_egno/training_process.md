@@ -242,6 +242,22 @@ are no precomputed cache files to ship.
 - `torch_scatter >= 2.1`
 - `neuraloperator >= 1.0` (for `SpectralConv`)
 
+**Reproducing the training run.** Retraining the submission model
+from scratch requires the same container and hyperparameters used
+for the original run. The container is a `debian_slim` Python 3.12
+image with:
+
+- `torch` 2.10.0 built for CUDA 12.8
+- `torch_geometric`, together with the PyG extensions `pyg_lib`,
+  `torch_scatter`, and `torch_cluster` installed from the matching
+  PyG wheel index (`https://data.pyg.org/whl/torch-2.10.0+cu128.html`)
+- `numpy`, `scipy`, and `neuraloperator` at their latest pip-released
+  versions at the time of training (April 2026)
+
+Training was launched with `seed = 42` on a single NVIDIA B200
+(180 GB HBM3) via Modal and converged in roughly seven wall-clock
+hours over the full 120-epoch budget.
+
 **Hardware expectations.** The model has ~360k parameters and a
 state-dict of ~1.8 MB. Inference runs on both CPU and GPU:
 
@@ -266,15 +282,6 @@ A few honest caveats for anyone reading the code:
   so the directional signal is available but not exploited. A natural
   extension would be to project it onto the edge direction inside each
   message (analogous to how we handle velocity).
-- **Fixed 5-frame horizon.** The model is trained to predict exactly
-  five output frames from five input frames. Extending beyond five
-  steps would require either an autoregressive rollout (which drifts
-  on wake dynamics, as we observed) or a different positional-encoding
-  scheme for longer time axes.
-- **Noisy validation on the final split.** The submission run uses a
-  95% / 2.5% / 2.5% split — only 4 simulations each for validation and
-  test. Per-epoch val metric is therefore a noisy signal, and early
-  stopping is based on a fairly high-variance estimate.
 - **Wake-region error dominates.** The spectral temporal mixing helps
   but does not fully capture the chaotic high-frequency fluctuations
   in the near-wake and boundary layer, which remain the main
