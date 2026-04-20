@@ -3,46 +3,106 @@
 ## Overview
 
 This submission predicts the next five frames of a 3D velocity field on
-an irregular 100k-point cloud surrounding one to three airfoils. The
-task has three invariances that motivate the architecture:
+an irregular 100k-point cloud surrounding one to three airfoils. Three
+structural properties of the task motivate the architecture:
 
-- Rotation and translation of the whole point cloud leave the physics
-  unchanged (the Navier–Stokes equations are E(3)-equivariant).
-- The airfoil surface imposes a no-slip boundary: v = 0 on all points
-  in `idcs_airfoil`.
-- The flow is dominated by advection with a predictable mean component
-  and a smaller, high-frequency turbulent fluctuation, making it natural
-  to decompose the target via Reynolds' mean–fluctuation split.
+- **$E(3)$-equivariance.** Rotating or translating the input point
+  cloud rotates or translates the output velocity field accordingly.
+  The Navier–Stokes equations are $E(3)$-equivariant, so their
+  solutions — velocity fields — transform as vectors under the group
+  action.
+- **No-slip boundary condition.** The airfoil surface enforces
+  $v = 0$ on all points in `idcs_airfoil`, at every timestep, for
+  every geometry.
+- **Reynolds mean–fluctuation structure.** The flow is dominated by a
+  slowly-varying advective mean with a smaller, high-frequency
+  turbulent component — a natural target for mean/fluctuation
+  decomposition.
 
-The model respects all three by construction.
+The model respects the first two by construction (equivariant message
+passing + a mask that zeros the prediction at `idcs_airfoil`) and
+leverages the third through a temporal-mean residual target.
+
+Prediction error on this dataset is heavily concentrated in the
+near-wake and boundary layer, where Kelvin–Helmholtz instabilities
+and vortex shedding produce high-frequency velocity fluctuations.
+Far-field points are nearly stationary and decay in error rapidly
+with distance to the airfoil. This motivates the use of spectral
+temporal mixing (below) — modelling the flow directly in frequency
+space along the time axis is well-suited to the dominant wake physics.
 
 ## Architecture
 
-The backbone is an E(n)-equivariant graph neural operator in the style
+The backbone is an $E(n)$-equivariant graph neural operator in the style
 of EGNO (Xu et al., 2024; arXiv:2401.11037), built on top of the
-Satorras–Hoogeboom–Welling EGNN layer (2021; arXiv:2102.09844). Each
-of the four stacked blocks performs, in order:
+Satorras–Hoogeboom–Welling EGNN layer (2021; arXiv:2102.09844). The
+model stacks four blocks of hidden width 96; each block runs three
+components in sequence, followed by a shared decoder:
 
-1. a 1-D spectral convolution along the input-time axis on the scalar
-   hidden channel (`TimeConv`);
-2. the same spectral convolution applied per-component on the raw
-   velocity vectors, treating the three spatial coordinates as a
-   preserved batch dimension so that rotation equivariance is maintained
-   (`TimeConvX`); and
-3. an EGNN message-passing step on a fixed 16-nearest-neighbour graph,
-   with a sigmoid edge gate (equivalent to the edge-inference mechanism
-   in EGNN Eq. 3.3).
+- **`TimeConv`** — a 1-D spectral convolution along the input-time
+  axis applied to the scalar hidden channel. Implemented with the
+  `neuraloperator` package's **`SpectralConv`** (Li et al., 2021;
+  arXiv:2010.08895). Writing $\mathcal{F}_t$ for the FFT along the
+  time axis, $\mathcal{K} = \{0, 1, 2\}$ for the retained Fourier
+  modes (the maximum for $T = 5$, since $\lfloor T/2 \rfloor + 1 = 3$),
+  and $W^{(k)}$ for the learnable per-mode weight, the update is
 
-Temporal spectral convolutions use the `neuraloperator` package's
-`SpectralConv` (Li et al., 2021; arXiv:2010.08895). For a five-frame
-input window, the maximum usable number of Fourier modes is
-`T // 2 + 1 = 3`, so all modes are retained.
+  $$
+  h' \;=\; h \;+\; \mathrm{LeakyReLU}\!\Bigl(\mathcal{F}_t^{-1}\bigl\{W^{(k)}\,\mathcal{F}_t[h](k) \cdot \mathbb{1}[k \in \mathcal{K}]\bigr\}\Bigr).
+  $$
 
-A final equivariant decoder produces the five output velocity
-increments from each block's final hidden state as
-`Δv_i = Σ_t α_i^(t) v_i^(t) + Σ_j w(m_ij) (x_j − x_i)`, a weighted
-combination of the equivariant input frames and relative positions
-with invariant scalar weights — equivariant by construction.
+- **`TimeConvX`** — the same spectral convolution applied
+  component-wise to the raw velocity, treating the three spatial
+  coordinates $d \in \{1,2,3\}$ as a preserved batch dimension so
+  that rotation equivariance is maintained:
+
+  $$
+  v'_{d}(x_i, t) \;=\; v_{d}(x_i, t) \;+\; \mathcal{F}_t^{-1}\!\bigl\{\tilde W^{(k)}\,\mathcal{F}_t[v_d(x_i, \cdot)](k) \cdot \mathbb{1}[k \in \mathcal{K}]\bigr\}(t).
+  $$
+
+  Because the same scalar weights $\tilde W^{(k)}$ are applied to each
+  spatial component independently, a rotation $R \in O(3)$ of the
+  input commutes with this map.
+
+- **`FixedEGNNGatedLayer`** — an EGNN message-passing step on a
+  fixed 16-nearest-neighbour graph, with the edge-inference mechanism
+  from Section 3.2 of the EGNN paper (here used with a single scalar
+  gate per edge, i.e. one gate head). For each edge
+  $(i, j) \in \mathcal{E}$, with attributes $a_{ij}$ encoding the
+  relative geometry and per-endpoint velocity projections, the block
+  runs
+
+  $$
+  \begin{aligned}
+  m_{ij}    &\;=\; \phi_e\!\bigl(h_i^{l},\, h_j^{l},\, \lVert x_i - x_j\rVert^2,\, a_{ij}\bigr) && \text{(Eq. 3)} \\
+  e_{ij}    &\;=\; \phi_\text{inf}(m_{ij}) \;=\; \sigma\!\bigl(\text{Linear}(m_{ij})\bigr) && \text{(Eq. 8)} \\
+  m_i       &\;=\; \sum_{j \in \mathcal{N}(i)} e_{ij}\, m_{ij}                             && \text{(Eq. 7)} \\
+  h_i^{l+1} &\;=\; \mathrm{LayerNorm}\!\bigl(h_i^{l} + \phi_h(h_i^{l},\, m_i)\bigr)         && \text{(Eq. 6, + residual + norm)}
+  \end{aligned}
+  $$
+
+  The MLP $\phi_\text{inf}$ is what the paper calls the *inferring
+  edges* network: originally introduced as a soft indicator of whether
+  an edge should contribute to message passing. Here we keep the k-NN
+  topology fixed and instead use $e_{ij}$ as a learned per-edge
+  **gate** — the same arithmetic, interpreted as a per-edge
+  weighting over existing edges rather than edge selection.
+
+- **`EquivariantDecoder`** — shared across the four blocks, produces
+  the per-point velocity increment from the final hidden state as
+
+  $$
+  \Delta v_i \;=\; \sum_{t} \alpha_i^{(t)}\, v_i^{(t)} \;+\; \sum_{j} w(m_{ij})\,(x_j - x_i),
+  $$
+
+  a weighted combination of the equivariant input frames and relative
+  positions with invariant scalar weights — equivariant by construction.
+
+Every sub-layer above (`TimeConv`, `TimeConvX`, and the node-update
+path of `FixedEGNNGatedLayer`) is wrapped in a residual connection,
+visible in the $h + (\ldots)$ / $v + (\ldots)$ form of each equation.
+Residuals are essential for stable optimisation of the stacked
+four-block network.
 
 The five output frames are decoded in **one shot** rather than
 autoregressively. This avoids the exposure-bias compounding that makes
@@ -50,54 +110,101 @@ autoregressive GNN rollouts drift on chaotic wake dynamics.
 
 ## Input features
 
-Per-point invariant scalars are derived from the geometry:
+Let $\mathcal{S} = \{x_j : j \in \text{idcs\_airfoil}\}$ be the set of
+airfoil-surface points for a given sample, and let
 
-- `udf_truncated`: distance to the nearest airfoil-surface point,
-  clamped at `d_max = 0.5`. Truncation focuses numerical resolution on
-  the boundary layer.
-- `udf_gradient`: unit vector toward the nearest surface point
-  (equivariant; enters the network through its magnitude or via
-  edge-projection).
-- A fixed k-nearest-neighbour graph with `k = 16`.
+$$
+s^{*}(x_i) \;=\; \arg\min_{s \in \mathcal{S}} \; \lVert x_i - s \rVert_2
+$$
 
-No features are cached; they are computed on the fly inside `forward`
-from `(pos, idcs_airfoil)` and therefore require no side files.
+denote the nearest surface point to $x_i$. The per-point geometry
+features are then:
+
+- **`udf_truncated`** — truncated unsigned distance to the nearest
+  surface point,
+
+  $$
+  \tilde{d}(x_i) \;=\; \min\!\bigl(\lVert x_i - s^{*}(x_i) \rVert_2,\; d_{\max}\bigr),
+  \qquad d_{\max} = 0.5.
+  $$
+
+  Truncation focuses numerical resolution on the boundary layer while
+  saturating the far-field to a constant.
+
+- **`udf_gradient`** — unit vector pointing from $x_i$ toward its
+  nearest surface point,
+
+  $$
+  \hat{n}(x_i) \;=\; \frac{s^{*}(x_i) - x_i}{\lVert s^{*}(x_i) - x_i \rVert_2}.
+  $$
+
+  This is $E(n)$-equivariant. In the current encoder the vector enters
+  only through its (constant-1) Euclidean norm $\lVert\hat{n}(x_i)\rVert_2$,
+  so the directional information is available to future variants but
+  is not actively exploited by this submission.
+
+- **k-nearest-neighbour graph** — directed edge set built from Euclidean
+  distance in $\mathbb{R}^3$ with $k = 16$,
+
+  $$
+  \mathcal{E}(x_i) \;=\; \bigl\{(i, j) : x_j \in \mathrm{kNN}_k(x_i)\bigr\},
+  \qquad k = 16.
+  $$
+
+All three are computed inside `forward` from `(pos, idcs_airfoil)`.
 
 ## Target and loss
 
 The network predicts the temporal-mean residual
 
-    Δv = v_out − (1/T) Σ_t v_in[t],
+$$
+\Delta v(x_i, t) \;=\; v_{\text{out}}(x_i, t) \;-\; \frac{1}{T} \sum_{t'=0}^{T-1} v_{\text{in}}(x_i, t'),
+$$
 
-and the output velocity is reconstructed as `v_out = mean(v_in) + Δv`.
+and the output velocity is reconstructed as
+
+$$
+v_{\text{out}}(x_i, t) \;=\; \frac{1}{T} \sum_{t'=0}^{T-1} v_{\text{in}}(x_i, t') \;+\; \Delta v(x_i, t).
+$$
+
 This Reynolds decomposition (Reynolds 1895) separates the slowly
 varying mean flow — the easy, predictable part — from the chaotic
 fluctuations that dominate the prediction error. Because the mean has
 lower variance than any single input frame, using it as the reference
-gives the regressor a cleaner, lower-variance target. The loss is
-ordinary MSE on the reconstructed `v_out`.
+gives the regressor a cleaner, lower-variance target.
+
+The training loss is ordinary mean-squared error on the reconstructed
+output,
+
+$$
+\mathcal{L} \;=\; \frac{1}{T \, N} \sum_{t=0}^{T-1} \sum_{i=1}^{N} \bigl\lVert \hat{v}_{\text{out}}(x_i, t) - v_{\text{out}}(x_i, t) \bigr\rVert_2^{\,2},
+$$
+
+where $\hat{v}_{\text{out}}$ is the model's prediction and
+$v_{\text{out}}$ the ground-truth future velocity field.
 
 ## Training
 
-- Optimizer: AdamW, learning rate 2 · 10⁻³, weight decay 10⁻².
-- Schedule: 15-epoch linear warmup followed by cosine annealing.
-- Batch size 1, gradient accumulation 8 (effective batch 8).
-- Maximum 120 epochs, early stopping with patience 30 on the
-  validation L2 metric.
-- Data split: 154 simulations for training, 4 for validation, 4 for
+- **Optimizer:** AdamW, learning rate $2 \cdot 10^{-3}$, weight decay $10^{-2}$.
+- **Schedule:** 15-epoch linear warmup followed by cosine annealing.
+- **Batch size:** 1, with gradient accumulation 8 (effective batch 8).
+- **Epoch budget:** maximum 120 epochs, early stopping with patience 30
+  on the validation L2 metric.
+- **Data split:** 154 simulations for training, 4 for validation, 4 for
   test, stratified by `{geometry_id}_{sim_id}` so that all five
   temporal chunks of a simulation stay inside one split. This gives
   770 training files out of 810 total.
-- Single seed (42). No ensembling.
+- **Seed:** 42. No ensembling.
 
-Timestep indices 0…T−1 are supplied to the encoder as a sinusoidal
-positional embedding (Vaswani et al., 2017; arXiv:1706.03762),
-concatenated with the invariant node scalars before the shared MLP.
+Timestep indices $0, \ldots, T-1$ are supplied to the encoder as a
+sinusoidal positional embedding (Vaswani et al., 2017;
+arXiv:1706.03762), concatenated with the invariant node scalars
+before the shared MLP.
 
 ## Hardware and wall time
 
 Architectural ablations (hidden-dim sweep, residual-reference choice,
-gating variants, number of attention heads) were carried out on 15% of
+gating variants, number of gate heads) were carried out on 15% of
 the training data using NVIDIA L40S GPUs (48 GB) on Modal, with
 30-epoch budgets that kept each experiment under USD 10. Once the
 final configuration was fixed, the submission model was retrained on
@@ -109,3 +216,44 @@ seven wall-clock hours at a cost of roughly USD 45.
 
 We gratefully acknowledge Modal for the GPU credits that made this
 work possible.
+
+## References
+
+1. Reynolds, O. (1895). "On the Dynamical Theory of Incompressible
+   Viscous Fluids and the Determination of the Criterion."
+   *Philosophical Transactions of the Royal Society of London A.*
+   Classical mean/fluctuation decomposition of turbulent flow; the
+   source of the residual target used here.
+
+2. Vaswani, A. et al. (2017). "Attention Is All You Need."
+   *Advances in Neural Information Processing Systems (NeurIPS).*
+   arXiv:1706.03762. Source of the sinusoidal positional embedding
+   used for the frame-index encoding.
+
+3. Sanchez-Gonzalez, A., Godwin, J., Pfaff, T., Ying, R., Leskovec,
+   J., Battaglia, P. (2020). "Learning to Simulate Complex Physics
+   with Graph Networks." *ICML.* arXiv:2002.09405. Prior art on
+   particle-based physical simulation with graph networks.
+
+4. Pfaff, T., Fortunato, M., Sanchez-Gonzalez, A., Battaglia, P.
+   (2021). "Learning Mesh-Based Simulation with Graph Networks."
+   *ICLR.* arXiv:2010.03409. Prior art on mesh-based GNN simulation;
+   the encode-process-decode paradigm informed our block structure.
+
+5. Satorras, V. G., Hoogeboom, E., Welling, M. (2021). "E(n)
+   Equivariant Graph Neural Networks." *ICML.* arXiv:2102.09844.
+   Base message-passing layer and the edge-inference mechanism
+   reused for the per-edge gate.
+
+6. Li, Z., Kovachki, N., Azizzadenesheli, K., Liu, B., Bhattacharya,
+   K., Stuart, A., Anandkumar, A. (2021). "Fourier Neural Operator
+   for Parametric Partial Differential Equations." *ICLR.*
+   arXiv:2010.08895. Spectral convolution used for temporal mixing
+   inside each block.
+
+7. Xu, M., Han, J., Lou, A., Kossaifi, J., Ramanathan, A.,
+   Azizzadenesheli, K., Leskovec, J., Ermon, S., Anandkumar, A.
+   (2024). "Equivariant Graph Neural Operator for Modeling 3D
+   Dynamics." *ICML.* arXiv:2401.11037. Block structure (spectral
+   temporal mixing stacked with equivariant message passing) and
+   the overall EGNO framing.
