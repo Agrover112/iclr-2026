@@ -5,10 +5,29 @@ Architecture: EGNO-style E(n)-equivariant GNN with spectral temporal mixing and
 a one-shot Δv decoder referenced against the temporal mean of the input frames
 (Reynolds decomposition).
 
-Single-file self-contained: all layer, decoder, feature-computation, and block
-definitions inlined. No imports from sibling model directories or `src/`.
+References:
+    - Satorras, Hoogeboom, Welling. "E(n) Equivariant Graph Neural Networks."
+      ICML 2021. arXiv:2102.09844.
+      Base message-passing layer + edge-inference gating (Eq. 3.3).
+    - Xu, Han, Lou, Kossaifi, Ramanathan, Azizzadenesheli, Leskovec, Ermon,
+      Anandkumar. "Equivariant Graph Neural Operator for Modeling 3D
+      Dynamics." ICML 2024. arXiv:2401.11037.
+      Block structure + spectral temporal mixing (TimeConv / TimeConvX).
+    - Li, Kovachki, Azizzadenesheli, Liu, Bhattacharya, Stuart, Anandkumar.
+      "Fourier Neural Operator for Parametric Partial Differential
+      Equations." ICLR 2021. arXiv:2010.08895.
+      Underlying `SpectralConv` (from `neuraloperator` library).
+    - Vaswani et al. "Attention Is All You Need." NeurIPS 2017.
+      arXiv:1706.03762. Sinusoidal positional embedding for frame indices.
+    - Reynolds, O. "On the Dynamical Theory of Incompressible Viscous Fluids
+      and the Determination of the Criterion." Philosophical Transactions of
+      the Royal Society of London A, 1895.
+      Classical mean/fluctuation decomposition motivating the residual target
+      `Δv = v_out − mean(v_in)` used by this model.
 
-Interface (matches GRaM competition `main.py`):
+
+
+Interface:
     model = GatedEGNOMeanResModel()
     velocity_out = model(t, pos, idcs_airfoil, velocity_in)
     # shapes: (B, 5, N, 3)
@@ -165,9 +184,8 @@ class FixedEGNNGatedLayer(FixedEGNNLayer):
         self.heads = heads
         self.head_dim = hidden_dim // heads
         self.gate = nn.Linear(hidden_dim, heads)
-        # Zero-init is intentional: sigmoid(0)=0.5 uniform per head at step 0
-        # (matches the FIXED INIT discipline; weights are overwritten by
-        # load_state_dict anyway when auto-loading a checkpoint).
+        # Zero-init so sigmoid(gate) = 0.5 uniformly per head at step 0 —
+        # neutral gate, equivalent to plain aggregation.
         nn.init.zeros_(self.gate.weight)
         nn.init.zeros_(self.gate.bias)
 
@@ -327,31 +345,26 @@ class GatedEGNOBlock(nn.Module):
 
 
 # ─────────────────────────────────────────────────────────────────
-# Main submission model
+# Main model
 # ─────────────────────────────────────────────────────────────────
 
 class GatedEGNOMeanResModel(nn.Module):
-    """Self-contained GRaM submission model.
+    """E(n)-equivariant spectral-temporal GNN for airflow prediction.
 
     One-shot prediction of 5 output velocity frames from 5 input frames,
-    geometry-conditioned via UDF features + kNN message passing,
-    temporal-mean residual reference (Reynolds decomposition).
-
-    No-argument constructor — all hyperparameters are hardcoded to match
-    the trained `state_dict.pt` in this directory.
+    geometry-conditioned via UDF features + kNN message passing, and
+    decoded as a residual against the temporal mean of the input window
+    (Reynolds decomposition).
     """
 
-    # ── HARDCODED HYPERPARAMETERS ──
-    # Must match the trained weights in state_dict.pt.
-    # Current settings match checkpoint `egno_meanres_h96_submission` (val 0.9046).
-    # Trained on 95/2.5/2.5 split (154 sims in train) with FIXED INIT.
-    hidden_dim = 96      # width of node/edge MLPs and block channels
+    # Hyperparameters are class attributes for no-argument construction.
+    hidden_dim = 96      # width of node / edge MLPs and block channels
     depth = 4            # number of EGNO blocks
-    n_modes = 3          # Fourier modes for length-5 time axis (max = 5//2+1 = 3)
-    heads = 1            # gate heads (1 = scalar gate per EGNN paper Eq 3.3)
+    n_modes = 3          # Fourier modes along time (max = T//2 + 1 = 3 for T=5)
+    heads = 1            # gate heads (1 = scalar gate per EGNN Eq 3.3)
     no_slip_mask = True  # zero velocity at airfoil indices at every output step
-    knn_k = 16           # kNN graph connectivity used at inference
-    udf_d_max = 0.5      # truncation threshold for UDF feature (matches training)
+    knn_k = 16           # kNN graph connectivity
+    udf_d_max = 0.5      # UDF truncation threshold
 
     per_frame_input_dim = 3   # vel_mag(1) + udf_trunc(1) + |udf_grad|(1)
 
@@ -405,7 +418,7 @@ class GatedEGNOMeanResModel(nn.Module):
             batch_knn.append(knn)
         return torch.stack(batch_feats), torch.stack(batch_knn)
 
-    # ── Forward (competition interface) ──
+    # ── Forward ──
     def forward(self, t: Tensor, pos: Tensor, idcs_airfoil: list[Tensor],
                 velocity_in: Tensor) -> Tensor:
         """
@@ -466,9 +479,8 @@ class GatedEGNOMeanResModel(nn.Module):
         )
         delta = delta_flat.reshape(T, B, N, 3).permute(1, 0, 2, 3).contiguous()
 
-        # Mean-residual reference: predict Δv relative to the temporal mean
-        # of the 5 input frames (Reynolds decomposition — cleaner target than
-        # last-frame reference).
+        # Reynolds-decomposition residual: add predicted Δv to the temporal
+        # mean of the input window to get the output velocity field.
         mean_frame = velocity_in.mean(dim=1, keepdim=True)         # (B, 1, N, 3)
         v_out = mean_frame + delta                                  # (B, T, N, 3)
 
