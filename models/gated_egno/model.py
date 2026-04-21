@@ -152,32 +152,62 @@ class FixedEGNNLayer(nn.Module):
 
     def forward(self, h: Tensor, x: Tensor, vel_all: Tensor, edge_index: Tensor
                 ) -> tuple[Tensor, Tensor, Tensor]:
+        # Equation numbers below refer to Satorras, Hoogeboom, Welling (2021),
+        # "E(n) Equivariant Graph Neural Networks" (arXiv:2102.09844).
         src, dst = edge_index
         rel = x[src] - x[dst]
         dist2 = (rel * rel).sum(-1, keepdim=True)
         dist = dist2.sqrt().clamp(min=1e-8)
         r_hat = rel / dist
 
+        # a_ij edge attributes: velocity frames projected onto the edge
+        # direction at each endpoint (invariant under E(n)).
         vel_proj_src = (vel_all[src] * r_hat.unsqueeze(1)).sum(-1)  # (E, 5)
         vel_proj_dst = (vel_all[dst] * r_hat.unsqueeze(1)).sum(-1)  # (E, 5)
 
+        # Eq. 3:  m_ij = phi_e(h_i, h_j, ||x_i - x_j||^2, a_ij)
         m_ij = self.phi_e(
             torch.cat([h[src], h[dst], dist2, vel_proj_src, vel_proj_dst], dim=-1)
         )
 
+        # Eq. 4:  x_i' = x_i + C * sum_{j != i} (x_i - x_j) * phi_x(m_ij)
+        # (disabled by default — the flow prediction happens in the velocity
+        # channel, so we keep the mesh coordinates fixed.)
         if self.update_coords:
             coord_w = self.phi_x(m_ij)
             delta_x = scatter_mean(rel * coord_w, dst, dim=0, dim_size=x.size(0))
             x = x + delta_x
 
+        # Eq. 5:  m_i = sum_{j in N(i)} m_ij   (unweighted aggregation)
         agg = scatter_add(m_ij, dst, dim=0, dim_size=h.size(0))
+        # Eq. 6:  h_i' = phi_h(h_i, m_i)   (with residual + LayerNorm)
         h = h + self.drop(self.phi_h(torch.cat([h, agg], dim=-1)))
         h = self.norm(h)
         return h, x, m_ij
 
 
 class FixedEGNNGatedLayer(FixedEGNNLayer):
-    """EGNN layer with multi-head sigmoid gating on aggregated messages."""
+    """EGNN layer with multi-head sigmoid gating on aggregated messages.
+
+    Replaces Eq. 5 of the EGNN paper (unweighted aggregation) with its
+    edge-inferred variant from the "Inferring Edges" section (Eq. 7 and
+    Eq. 8 of arXiv:2102.09844):
+
+        Eq. 8:  ẽ_ij = phi_inf(m_ij) = sigmoid(Linear(m_ij))
+        Eq. 7:  m_i  = sum_{j in N(i)} ẽ_ij * m_ij
+
+    In the paper, ẽ_ij is interpreted as an edge-existence inference — a
+    soft indicator of whether an edge should contribute to message
+    passing. Here we adapt the same operation as a per-edge gate on a
+    fixed k-nearest-neighbour graph where the graph topology is kept, and
+    ẽ_ij becomes a learned weight that modulates how
+    strongly each neighbour contribute independently. The math is identical; the
+    interpretation moves from "should this edge exist?" to "how much
+    does this existing edge matter here?".
+
+    The multi-head extension below splits the hidden dimension into H
+    slices and applies an independent Eq. 8 gate to each slice.
+    """
 
     def __init__(self, hidden_dim: int, dropout: float = 0.0,
                  update_coords: bool = False, heads: int = 1):
@@ -214,7 +244,8 @@ class FixedEGNNGatedLayer(FixedEGNNLayer):
             delta_x = scatter_mean(rel * coord_w, dst, dim=0, dim_size=x.size(0))
             x = x + delta_x
 
-        # Multi-head sigmoid gating: split hidden into H slices, each gated.
+        # Eq. 8:  ẽ_ij = sigmoid(Linear(m_ij))   (per head)
+        # Eq. 7:  m_i  = sum_j ẽ_ij * m_ij       (per head's hidden slice)
         g = torch.sigmoid(self.gate(m_ij))                      # (E, H)
         g_wide = g.repeat_interleave(self.head_dim, dim=1)       # (E, hidden)
         agg = scatter_add(g_wide * m_ij, dst, dim=0, dim_size=h.size(0))
