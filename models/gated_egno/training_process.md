@@ -41,7 +41,7 @@ components in sequence, followed by a shared decoder:
 
 - **`TimeConv`** — a 1-D spectral convolution along the input-time
   axis applied to the scalar hidden channel. Implemented with the
-  `neuraloperator` package's **`SpectralConv`** (Li et al., 2021;
+  `neuraloperator` package's **`SpectralConv`** (Li et al., 2021,
   arXiv:2010.08895). Let $\mathcal{F}_t$ be the FFT along the time
   axis, $\hat{h}(k) = \mathcal{F}_t(h)(k)$ the $k$-th Fourier
   coefficient, $\mathcal{K} = \{0, 1, 2\}$ the retained modes (the
@@ -201,7 +201,7 @@ $v_{\mathrm{out}}$ the ground-truth future velocity field.
 - **Seed:** 42. No ensembling.
 
 Timestep indices $0, \ldots, T-1$ are supplied to the encoder as a
-sinusoidal positional embedding (Vaswani et al., 2017;
+sinusoidal positional embedding (Vaswani et al., 2017,
 arXiv:1706.03762), concatenated with the invariant node scalars
 before the shared MLP.
 
@@ -217,7 +217,7 @@ All training ran on Modal-provisioned GPUs, in two phases:
 Ablations covered the hidden-dimension sweep, residual-reference choice,
 gating variants, and number of gate heads. Once the final configuration
 was fixed, the submission model was retrained from scratch on the full
-split; it converged in approximately seven wall-clock hours.
+split. It converged in approximately seven wall-clock hours.
 
 ## Reproducibility
 
@@ -273,7 +273,7 @@ state-dict of ~1.8 MB. Inference runs on both CPU and GPU:
 **Determinism.** Inference is deterministic given fixed inputs: the
 k-NN graph from `cKDTree` is stable, `torch.cdist` is deterministic
 on CPU, and `torch.fft` is deterministic on both CPU and CUDA.
-Training was performed with `seed = 42`; no ensembling or
+Training was performed with `seed = 42`. No ensembling or
 dropout-based test-time randomness is used.
 
 ## Limitations
@@ -310,7 +310,7 @@ several of the modelling choices described above.
 1. Reynolds, O. (1895). "On the Dynamical Theory of Incompressible
    Viscous Fluids and the Determination of the Criterion."
    *Philosophical Transactions of the Royal Society of London A.*
-   Classical mean/fluctuation decomposition of turbulent flow; the
+   Classical mean/fluctuation decomposition of turbulent flow. The
    source of the residual target used here.
 
 2. Vaswani, A. et al. (2017). "Attention Is All You Need."
@@ -325,8 +325,8 @@ several of the modelling choices described above.
 
 4. Pfaff, T., Fortunato, M., Sanchez-Gonzalez, A., Battaglia, P.
    (2021). "Learning Mesh-Based Simulation with Graph Networks."
-   *ICLR.* arXiv:2010.03409. Prior art on mesh-based GNN simulation;
-   the encode-process-decode paradigm informed our block structure.
+   *ICLR.* arXiv:2010.03409. Prior art on mesh-based GNN simulation.
+   The encode-process-decode paradigm informed our block structure.
 
 5. Satorras, V. G., Hoogeboom, E., Welling, M. (2021). "E(n)
    Equivariant Graph Neural Networks." *ICML.* arXiv:2102.09844.
