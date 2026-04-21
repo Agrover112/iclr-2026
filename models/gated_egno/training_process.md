@@ -212,12 +212,12 @@ All training ran on Modal-provisioned GPUs, in two phases:
 | Phase | GPU | Data | Budget | Cost |
 |---|---|---|---|---|
 | Architectural ablations | NVIDIA L40S (48 GB) | 15% of training set | 30 epochs per run | < USD 10 per run |
-| Final submission run | NVIDIA B200 (180 GB HBM3) | full 770-file training split | 120 epochs | ~USD 45 |
+| Final submission run | NVIDIA B200 (180 GB HBM3) | full 770-file training split | 120 epochs | ~USD 95 |
 
 Ablations covered the hidden-dimension sweep, residual-reference choice,
 gating variants, and number of gate heads. Once the final configuration
 was fixed, the submission model was retrained from scratch on the full
-split. It converged in approximately seven wall-clock hours.
+split. It converged in approximately 15 hours 37 minutes.
 
 ## Reproducibility
 
@@ -258,8 +258,8 @@ image with:
   versions at the time of training (April 2026)
 
 Training was launched with `seed = 42` on a single NVIDIA B200
-(180 GB HBM3) via Modal and converged in roughly seven wall-clock
-hours over the full 120-epoch budget.
+(180 GB HBM3) via Modal and converged in roughly 15 hours 37 minutes
+(56 223 s of wall time) over the full 120-epoch budget.
 
 **Hardware expectations.** The model has ~360k parameters and a
 state-dict of ~1.8 MB. Inference runs on both CPU and GPU:
