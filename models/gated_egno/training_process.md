@@ -34,9 +34,9 @@ space along the time axis is well-suited to the dominant wake physics.
 ## Architecture
 
 The backbone is an $E(n)$-equivariant graph neural operator in the style
-of EGNO (Xu et al., 2024; arXiv:2401.11037), built on top of the
-Satorras–Hoogeboom–Welling EGNN layer (2021; arXiv:2102.09844). The
-model stacks four blocks of hidden width 96; each block runs three
+of EGNO (Xu et al., 2024, arXiv:2401.11037), built on top of the
+Satorras–Hoogeboom–Welling EGNN layer (2021, arXiv:2102.09844). The
+model stacks four blocks of hidden width 96. Each block runs three
 components in sequence, followed by a shared decoder:
 
 - **`TimeConv`** — a 1-D spectral convolution along the input-time
@@ -207,14 +207,17 @@ before the shared MLP.
 
 ## Hardware and wall time
 
-Architectural ablations (hidden-dim sweep, residual-reference choice,
-gating variants, number of gate heads) were carried out on 15% of
-the training data using NVIDIA L40S GPUs (48 GB) on Modal, with
-30-epoch budgets that kept each experiment under USD 10. Once the
-final configuration was fixed, the submission model was retrained on
-the full split above using a single NVIDIA B200 (180 GB HBM3), also
-provisioned via Modal. The submission run converged in approximately
-seven wall-clock hours at a cost of roughly USD 45.
+All training ran on Modal-provisioned GPUs, in two phases:
+
+| Phase | GPU | Data | Budget | Cost |
+|---|---|---|---|---|
+| Architectural ablations | NVIDIA L40S (48 GB) | 15% of training set | 30 epochs per run | < USD 10 per run |
+| Final submission run | NVIDIA B200 (180 GB HBM3) | full 770-file training split | 120 epochs | ~USD 45 |
+
+Ablations covered the hidden-dimension sweep, residual-reference choice,
+gating variants, and number of gate heads. Once the final configuration
+was fixed, the submission model was retrained from scratch on the full
+split; it converged in approximately seven wall-clock hours.
 
 ## Reproducibility
 
