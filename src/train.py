@@ -203,7 +203,7 @@ def train_one_seed(model_name, splits, seed, epochs, lr, patience, accum_steps, 
                     data_fraction=1.0, run_tag=None, weight_decay=0.01, warmup_epochs=0, batch_size=1,
                     gnn_depth=None, gnn_hidden=None, gnn_heads=None, gnn_dropout=None,
                     update_coords=None, no_slip_mask=None, loss_fn="mse", log_udf=False,
-                    resume_from=None):
+                    resume_from=None, use_gate=None):
     # Resolve feature names: CLI override > model default > empty
     ModelClass = get_model_class(model_name)
     if features is not None:
@@ -232,6 +232,7 @@ def train_one_seed(model_name, splits, seed, epochs, lr, patience, accum_steps, 
     if gnn_dropout is not None: gnn_kwargs['dropout']    = gnn_dropout
     if update_coords is not None: gnn_kwargs['update_coords'] = update_coords
     if no_slip_mask  is not None: gnn_kwargs['no_slip_mask']  = no_slip_mask
+    if use_gate      is not None: gnn_kwargs['use_gate']      = use_gate
     try:
         model = ModelClass(features=feature_names, **gnn_kwargs)
     except TypeError:
@@ -543,6 +544,10 @@ def main():
     parser.add_argument('--gnn-hidden', type=_positive_int, default=None)
     parser.add_argument('--gnn-heads', type=_positive_int, default=None)
     parser.add_argument('--gnn-dropout', type=_prob_float, default=None)
+    parser.add_argument('--use-gate', dest='use_gate',
+                        action=argparse.BooleanOptionalAction, default=None,
+                        help='gated_egno / gated_egno_meanres only: --use-gate (default) '
+                             'keeps the per-edge sigmoid gate; --no-use-gate ablates it.')
     parser.add_argument('--update-coords', action='store_true',
                         help='FixedEGNN only: enable equivariant coordinate updates inside layers.')
     # IMPORTANT: argparse.BooleanOptionalAction silently treats any flag that
@@ -638,6 +643,7 @@ def main():
             loss_fn=args.loss_fn,
             log_udf=args.log_udf,
             resume_from=args.resume_from,
+            use_gate=args.use_gate,
         )
         all_results.append(result)
 

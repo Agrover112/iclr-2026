@@ -79,6 +79,10 @@ def train_one_seed(
     resume_from: str = "",  # path on /runs volume to a best_model.pt for warm-start finetuning
     train_ratio: float = 0.7,
     val_ratio: float = 0.15,
+    # gEGNO / gated_egno_meanres specific: ablate the per-edge gate by passing
+    # --no-use-gate (Modal auto-flips `use_gate: True` to False). No collision
+    # since the kwarg is `use_*` not `no_*`.
+    use_gate: bool = True,
 ):
     import subprocess, time as _time
     ts = _time.strftime("%Y%m%d-%H%M%S")
@@ -113,6 +117,7 @@ def train_one_seed(
     if gnn_heads   > 0:   cmd.extend(["--gnn-heads",   str(gnn_heads)])
     if gnn_dropout >= 0:  cmd.extend(["--gnn-dropout", str(gnn_dropout)])
     if update_coords:     cmd.append("--update-coords")
+    cmd.append("--use-gate" if use_gate else "--no-use-gate")
     # argparse.BooleanOptionalAction also treats leading `--no-` as negation,
     # so src/train.py uses the affirmative name `--enforce-no-slip` to match.
     cmd.append("--enforce-no-slip" if enforce_no_slip else "--no-enforce-no-slip")
@@ -169,6 +174,7 @@ def main(
     resume_from: str = "",
     train_ratio: float = 0.7,
     val_ratio: float = 0.15,
+    use_gate: bool = True,
     gpu: str = DEFAULT_GPU,
     timeout_hours: float = DEFAULT_TIMEOUT_SEC / 3600,
 ):
@@ -184,7 +190,7 @@ def main(
         (seed, model, epochs, patience, lr, data_fraction, run_tag, wandb_project, wandb_entity,
          features, no_udf, max_distance, batch_size, weight_decay, warmup_epochs, grad_accum,
          gnn_depth, gnn_hidden, gnn_heads, gnn_dropout, update_coords, enforce_no_slip, loss_fn,
-         log_udf, resume_from, train_ratio, val_ratio)
+         log_udf, resume_from, train_ratio, val_ratio, use_gate)
         for seed in seed_list
     ]))
 

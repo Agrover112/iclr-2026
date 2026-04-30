@@ -145,17 +145,28 @@ class GatedEGNOBlock(nn.Module):
 
     def __init__(self, hidden_dim: int, n_modes: int = 3,
                  dropout: float = 0.0, update_coords: bool = False,
-                 heads: int = 1):
+                 heads: int = 1, use_gate: bool = True):
         super().__init__()
         self.time_conv_h = TimeConv(hidden_dim, n_modes=n_modes)
         self.time_conv_v = TimeConvX(channels=1, n_modes=n_modes)
-        # heads=1 by default — original single-scalar gate per edge. The
-        # multi-head extension (heads>1) is from FixedEGNNGatedLayer's newer
-        # behavior; we default to 1 to stay compatible with checkpoints
-        # trained before multi-head was introduced.
-        self.gnn = FixedEGNNGatedLayer(
-            hidden_dim, dropout=dropout, update_coords=update_coords, heads=heads,
-        )
+        if use_gate:
+            # Gated variant (default) — EGNN with sigmoid edge-inference gate.
+            # heads=1 by default — original single-scalar gate per edge. The
+            # multi-head extension (heads>1) is from FixedEGNNGatedLayer's
+            # newer behaviour; we default to 1 to stay compatible with
+            # checkpoints trained before multi-head was introduced.
+            self.gnn = FixedEGNNGatedLayer(
+                hidden_dim, dropout=dropout,
+                update_coords=update_coords, heads=heads,
+            )
+        else:
+            # Ungated ablation: plain FixedEGNNLayer, e_ij ≡ 1. Used to
+            # measure whether the gate earns its keep inside the full EGNO
+            # stack (spectral time mixing + mean-residual decoder).
+            from models.fixed_egnn.model import FixedEGNNLayer
+            self.gnn = FixedEGNNLayer(
+                hidden_dim, dropout=dropout, update_coords=update_coords,
+            )
 
     def forward(
         self,
@@ -213,6 +224,7 @@ class GatedEGNOModel(ResidualModel):
     dropout      = 0.0
     no_slip_mask = True
     heads        = 1      # per-edge gate heads (EGNN paper Eq 3.3 is heads=1)
+    use_gate     = True   # set False to ablate the per-edge sigmoid gate
 
     # Per-time-slice scalar input dim: vel_mag(1) + udf_trunc(1) + |udf_grad|(1) = 3.
     per_frame_input_dim = 3
@@ -231,6 +243,7 @@ class GatedEGNOModel(ResidualModel):
         no_slip_mask=None,
         n_modes=None,
         heads=None,
+        use_gate=None,
         **kwargs,
     ):
         if not _SCATTER_AVAILABLE:
@@ -251,6 +264,7 @@ class GatedEGNOModel(ResidualModel):
         if no_slip_mask  is not None: self.no_slip_mask = no_slip_mask
         if n_modes       is not None: self.n_modes      = n_modes
         if heads         is not None: self.heads        = heads
+        if use_gate      is not None: self.use_gate     = use_gate
         self.update_coords = getattr(self, "update_coords", False)
 
         super().__init__()
@@ -271,6 +285,7 @@ class GatedEGNOModel(ResidualModel):
                 self.hidden_dim, n_modes=self.n_modes,
                 dropout=self.dropout, update_coords=self.update_coords,
                 heads=self.heads,
+                use_gate=self.use_gate,
             )
             for _ in range(self.depth)
         ])

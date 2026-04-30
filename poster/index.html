@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gEGNO · GRaM Workshop @ ICLR 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {delimiters:[
+    {left:'$$', right:'$$', display:true},
+    {left:'$',  right:'$',  display:false}
+  ], throwOnError:false});"></script>
+<style>
+  /* ICLR 2026 workshop poster. Portrait 61 x 91 cm.
+     ICLR panel-card aesthetic: tinted section boxes, numbered sections,
+     headline callout under header. KTH identity: Figtree, navy #000061. */
+  :root {
+    --navy:   #000061;
+    --navy2:  #002b9a;
+    --ink:    #111;
+    --mute:   #5a5a65;
+    --line:   #e0e0e6;
+    --accent: #c44e52;
+    --panel:  #f4f6fc;
+    --panel-b: rgba(0, 0, 97, 0.22);
+  }
+  @page { size: 61cm 91cm; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #e5e5e8;
+    font-family: "Figtree", system-ui, sans-serif; color: var(--ink); }
+  body { display: flex; flex-direction: column; align-items: center;
+    padding: 1rem 0 3rem 0; }
+  @media print {
+    html, body { background: #fff; padding: 0; margin: 0; }
+    body { padding: 0; }
+    .poster { box-shadow: none; }
+  }
+  .size-badge {
+    font-family: "JetBrains Mono", monospace; font-size: 11px; color: #555;
+    background: #fff; padding: 4px 10px; border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12); margin-bottom: 1rem;
+    letter-spacing: 0.3px;
+  }
+  @media screen {
+    .poster {
+      transform: scale(calc((100vh - 6rem) / 91cm));
+      transform-origin: top center;
+      margin-bottom: calc(91cm * ((100vh - 6rem) / 91cm) - 91cm);
+    }
+  }
+  .poster {
+    width: 61cm; height: 91cm; background: #fff;
+    box-shadow: 0 8px 28px rgba(0,0,0,.18);
+    padding: 0.8cm 1.2cm 0.8cm 1.2cm;
+    box-sizing: border-box;
+    display: flex; flex-direction: column;
+    font-size: 19pt; line-height: 1.38;
+  }
+  /* Header: logo-left, title-center, logo-right */
+  .header {
+    display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; gap: 0.8cm;
+    padding-bottom: 0.25cm; border-bottom: 2px solid var(--navy);
+    margin-bottom: 0.2cm;
+  }
+  .header .logo-l img, .header .logo-r img {
+    max-height: 4.8cm; max-width: 10cm; display: block;
+  }
+  .header .title-block { text-align: center; }
+  .header h1 {
+    font-size: 44pt; font-weight: 800; color: var(--navy);
+    margin: 0; letter-spacing: -0.4pt; line-height: 1.05;
+  }
+  .header .sub { font-size: 20pt; font-weight: 600; color: var(--mute); margin: 0.18cm 0 0 0; }
+  .header .authors { font-size: 18pt; margin: 0.22cm 0 0 0; color: var(--ink); }
+  .header .aff-line { font-size: 14pt; color: var(--mute); margin: 0.1cm 0 0 0; font-weight: 400; }
+
+  /* Full-width architecture strip — no card styling */
+  .arch-band {
+    margin: 0.05cm 0 0.1cm 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    text-align: center;
+  }
+  .arch-band .arch-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 0.2cm;
+  }
+  .arch-band h2 {
+    font-size: 24pt; margin: 0; padding: 0 0 0.05cm 0;
+    border-bottom: none;
+  }
+  .arch-band .arch-sub {
+    font-size: 14pt; color: var(--mute); margin: 0;
+  }
+  .arch-band svg { width: 100%; height: auto; display: block; }
+  .arch-band figcaption {
+    text-align: center; margin-top: 0.1cm;
+    font-size: 13pt; color: var(--mute); line-height: 1.3;
+  }
+  /* 3-column grid */
+  .cols {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 0 0.55cm;
+    overflow: hidden;
+  }
+  .col { display: flex; flex-direction: column; gap: 0.28cm;
+    padding: 0 0.05cm; overflow: hidden; }
+
+  /* Section panel cards */
+  section.box {
+    background: var(--panel);
+    border: 1px solid var(--panel-b);
+    border-radius: 4px;
+    padding: 0.22cm 0.38cm 0.3cm 0.38cm;
+    margin: 0;
+    break-inside: avoid;
+  }
+  section.box > h2:first-child { margin-top: 0; }
+  section.box > h3:first-child { margin-top: 0.05cm; }
+
+  /* Section headers */
+  h2 {
+    font-family: "Figtree"; font-size: 26pt; font-weight: 700;
+    color: var(--navy); margin: 0.3cm 0 0.18cm 0;
+    padding-bottom: 0.1cm; border-bottom: 1.5px solid var(--navy);
+    line-height: 1.12;
+  }
+  h2 .secnum {
+    display: inline-block; color: var(--accent);
+    font-weight: 800; margin-right: 0.3em;
+    font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    font-family: "Figtree"; font-size: 19pt; font-weight: 700;
+    color: var(--navy2); margin: 0.2cm 0 0.08cm 0;
+  }
+  p { margin: 0 0 0.22cm 0; font-size: 17pt; }
+  ul, ol { margin: 0 0 0.22cm 1.1em; padding: 0; font-size: 17pt; }
+  li { margin-bottom: 0.1cm; }
+  .hint { color: var(--mute); font-size: 14pt; }
+  figure { margin: 0.18cm 0 0.12cm 0; }
+  figure img { width: 100%; height: auto; display: block; }
+  figcaption { font-size: 13pt; color: var(--mute); margin-top: 0.1cm; line-height: 1.3; }
+  table { width: 100%; border-collapse: collapse; font-size: 15pt; margin: 0.1cm 0 0.12cm 0; }
+  th, td { text-align: left; padding: 0.1cm 0.25cm; vertical-align: top;
+    border-bottom: 1px solid var(--line); }
+  th { color: var(--navy); font-weight: 600; border-bottom-color: var(--navy); }
+  .eq { margin: 0.12cm 0; font-size: 17pt; }
+  .eqlabel { font-size: 14pt; color: var(--navy); font-weight: 600; margin-bottom: 0.04cm; display:block; }
+  .eqnote  { font-size: 14pt; color: var(--mute); margin-top: 0.06cm; line-height: 1.32; }
+  /* Training-setup table */
+  table.training-table {
+    width: 100%; border-collapse: collapse; font-size: 14.5pt;
+    margin: 0.12cm 0 0.18cm 0;
+  }
+  table.training-table th {
+    text-align: left; color: var(--navy); font-weight: 600;
+    padding: 0.12cm 0.3cm 0.12cm 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top; white-space: nowrap; width: 36%;
+  }
+  table.training-table td {
+    text-align: left; padding: 0.12cm 0;
+    border-bottom: 1px solid var(--line); vertical-align: top;
+  }
+  table.training-table tr:last-child th,
+  table.training-table tr:last-child td { border-bottom: none; }
+  .best { color: var(--accent); font-weight: 700; }
+  .mono { font-family: "JetBrains Mono", monospace; font-size: 15pt; }
+  .refs ol { margin: 0.05cm 0 0 1em; padding: 0; font-size: 12pt; color: var(--mute); line-height: 1.3; }
+  .refs li { margin-bottom: 0.06cm; }
+  .refs code { color: var(--ink); font-family: "JetBrains Mono", monospace; font-size: 11.5pt; }
+  .ack { font-size: 15pt; color: var(--ink); margin-top: 0.1cm; }
+  .ack p { font-size: 15pt; margin: 0 0 0.2cm 0; line-height: 1.38; }
+  .katex-display { margin: 0.08cm 0 !important; }
+  /* Numeric citation markers */
+  .cite { color: var(--navy); font-weight: 600; text-decoration: none; padding: 0 1px; }
+  .cite:hover { text-decoration: underline; }
+  /* Submitted-configuration strip above footer */
+  .submit-strip {
+    margin: 0.18cm 0 0.18cm 0;
+    padding: 0.25cm 0.5cm;
+    background: #eef2fa;
+    border-left: 5px solid var(--navy);
+    border-radius: 3px;
+    text-align: center;
+    font-size: 17pt;
+    line-height: 1.35;
+  }
+  /* KTH footer bar */
+  .kth-bar {
+    margin-top: auto;
+    background: var(--navy);
+    color: #fff;
+    padding: 0.5cm 1.2cm;
+    display: flex; align-items: center; gap: 0.5cm;
+    font-family: "Figtree", system-ui, sans-serif;
+    letter-spacing: 0.5pt;
+  }
+  .kth-bar .brand {
+    font-size: 20pt; font-weight: 800; color: #fff;
+    padding: 0 0.25cm 0 0; border-right: 2px solid rgba(255,255,255,0.45);
+    margin-right: 0.1cm; line-height: 1;
+  }
+  .kth-bar .full { font-size: 13pt; font-weight: 500; color: #dee1ef; }
+</style>
+</head>
+<body>
+<section class="poster">
+
+  <header class="header">
+    <div class="logo-l">
+      <img src="https://i0.wp.com/www.kth.se/blogs/studentblog/files/2018/05/cropped-KTH_Logotyp_RGB_1080.jpg?fit=512%2C512&ssl=1"
+           alt="KTH Royal Institute of Technology">
+    </div>
+    <div class="title-block">
+      <h1>gEGNO: A Gated Equivariant Graph Neural Operator for Airflow Prediction</h1>
+      <p class="sub">GRaM Workshop, Competition Track @ ICLR 2026</p>
+      <p class="authors">
+        <a href="https://www.linkedin.com/in/ankit-grover121/" style="color:inherit; text-decoration:none"><strong>Ankit Grover</strong></a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://remibourgerie.github.io/" style="color:inherit; text-decoration:none"><strong>R&eacute;mi Bourgerie</strong></a>
+      </p>
+      <p class="aff-line">KTH Royal Institute of Technology, Stockholm, Sweden</p>
+    </div>
+    <div class="logo-r">
+      <img src="https://iclr-blog-track.github.io/public/images/2021-09-01-sample-submission/ICLR-logo.png"
+           alt="ICLR 2026">
+    </div>
+  </header>
+
+  <section class="arch-band">
+    <img src="../figures/gEGNO_architecture.png"
+         alt="gEGNO architecture diagram. Input feeds block repeated 4 times containing TimeConv, TimeConvX, and Gated EGNN (ours). Decoder (ours) produces one-shot Delta v, added to Reynolds mean for output velocity."
+         style="height: 9.5cm; width: auto; max-width: 100%; display: block; margin: 0 auto; transform: translateX(1.5cm);">
+    <figcaption style="margin-top: 0.08cm;"><strong>Fig.&nbsp;1. gEGNO architecture</strong> &mdash; one block of the $L{=}4$ stack; red = our contributions. Time embeddings are positional indices, not physical $\Delta t$.</figcaption>
+  </section>
+
+  <div class="cols">
+
+    <!-- Column 1 -->
+    <div class="col">
+
+      <section class="box">
+        <h2><span class="secnum">1</span>Abstract</h2>
+        <ul>
+          <li><strong>Task.</strong> Predict five future velocity frames on a 100k-point cloud surrounding one to three airfoils.</li>
+          <li><strong>Model.</strong> gEGNO couples an $E(3)$-equivariant EGNN backbone <a class="cite" href="#ref3">[3]</a> with FNO-style spectral mixing along time <a class="cite" href="#ref4">[4]</a> and a Reynolds mean-residual decoder <a class="cite" href="#ref1">[1]</a>.</li>
+          <li><strong>Result.</strong> Test L2 = <strong>1.118</strong>, reducing the organiser MLP baseline (3.16) by 65% and a persist-last-frame baseline (1.68) by 33%. Ablations at df = 0.15 show spectral temporal mixing as the largest single contribution ($-5.3\%$ test L2), with per-edge gating inside the full gEGNO stack adding a further $-0.7\%$.</li>
+        </ul>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">2</span>Problem &amp; Symmetries</h2>
+        <p>
+          Given five consecutive frames of the 3D velocity field, predict the
+          next five. Evaluation is mean per-point L2, averaged across the five
+          output frames.
+        </p>
+        <table>
+          <tr><th>Symmetry</th><th>Consequence</th></tr>
+          <tr>
+            <td>$E(3)$-equivariance <span class="hint">(Navier&ndash;Stokes)</span></td>
+            <td>EGNN scalar/vector separation</td>
+          </tr>
+          <tr>
+            <td>No-slip <span class="hint">$v=0$ on airfoil</span></td>
+            <td>Hard zero-masking at airfoil-surface nodes</td>
+          </tr>
+          <tr>
+            <td>Reynolds decomposition <a class="cite" href="#ref1">[1]</a> <span class="hint">$v = \bar v + v'$</span></td>
+            <td>Predict fluctuation $\Delta v$ about the temporal mean $\bar v$</td>
+          </tr>
+        </table>
+        <figure>
+          <img src="../figures/poster_udf_hist.png"
+               alt="Two-panel histogram of distance-to-nearest-airfoil-surface (UDF) aggregated across 80 training samples. Left panel linear-y zoom 0-0.15 showing 74 percent of points within sigma 0.05. Right panel log-y full range 0-0.5 showing long free-stream tail.">
+          <figcaption>
+            Fig.&nbsp;2. Distance-to-airfoil distribution over 80 samples (8M points).
+            <strong>Left:</strong> linear-y zoom of the boundary layer. 74% of points lie within $\lambda{=}0.05$, with median $d \approx 0.008$.
+            <strong>Right:</strong> log-y across the full range, showing the free-stream tail.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">3</span>Features &amp; Graph</h2>
+        <p>
+          Let $s^\star(x_i) = \arg\min_{s \in \mathcal{S}}\|x_i-s\|_2$
+          denote the nearest airfoil-surface point.
+        </p>
+        <div class="eq">
+          <span class="eqlabel">Truncated UDF</span>
+          $$\tilde d(x_i) = \min(\|x_i - s^\star\|_2,\; d_{\max}),\quad d_{\max}=0.5$$
+        </div>
+        <div class="eq">
+          <span class="eqlabel">Inward surface normal (equivariant, $-\nabla \tilde d$)</span>
+          $$\hat n(x_i) = \tfrac{s^\star - x_i}{\|s^\star - x_i\|_2}$$
+        </div>
+
+        <h3>Fixed kNN (submitted)</h3>
+        <p>
+          Directed $k$-NN with $k = 16$ in $\mathbb{R}^3$, computed per sample
+          via SciPy's <span class="mono">cKDTree</span>. The graph topology
+          is invariant under rigid motions.
+        </p>
+
+        <h3>UDF-adaptive kNN (ablated)</h3>
+        <div class="eq">
+          $$k(x_i) = k_{\text{far}} + (k_{\text{near}}-k_{\text{far}})\,e^{-\tilde d(x_i)/\lambda},\ \lambda{=}0.05$$
+        </div>
+        <figure>
+          <img src="../figures/adaptive_knn_03_comparison.png"
+               alt="Side-by-side view of uniform k=16 versus UDF-adaptive k_near=32 / k_far=8 kNN graphs on a multi-airfoil geometry, colour = per-node k">
+          <figcaption>
+            Fig. 3. Uniform $k{=}16$ (left) vs UDF-adaptive
+            $k_{\text{near}}{=}32,\,k_{\text{far}}{=}8$ (right). The adaptive
+            graph concentrates capacity near the boundary layer but comes out
+            1.6% worse on test with the plain EGNN backbone at df 0.15 (unswept).
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="../figures/adaptive_knn_01_curve.png"
+               alt="Exponential decay of the adaptive-kNN neighbour count k(d) as a function of UDF distance, for several values of sigma">
+          <figcaption>
+            Fig. 4. Decay of $k(d)$ for several $\lambda$.
+            $\lambda{=}0.05$ anchors the 1/e point at the empirical
+            boundary-layer scale and saturates at $k_{\text{far}}{=}8$
+            by $d \approx 0.2$.
+          </figcaption>
+        </figure>
+      </section>
+
+    </div>
+
+    <!-- Column 2 -->
+    <div class="col">
+
+      <section class="box">
+        <h2><span class="secnum">4</span>Architecture</h2>
+        <div class="eq">
+          <span class="eqlabel">Time-axis semantics (ours vs EGNO <a class="cite" href="#ref5">[5]</a>)</span>
+          <p style="margin: 0.06cm 0 0.04cm 0;">
+            <strong>Ours.</strong> The time axis spans five real input frames. Positional indices $0{\dots}4$ serve only as order tags, and the spectral operator mixes genuine temporal history.
+          </p>
+          <p style="margin: 0.04cm 0 0.04cm 0;">
+            <strong>EGNO (contrast).</strong> A single current state is replicated $P$ times, each copy tagged with its physical future offset $\Delta t_p$. The spectral operator therefore mixes copies of the same state.
+          </p>
+        </div>
+        <div class="eq">
+          <span class="eqlabel">TimeConv (spectral mixing along $t$)</span>
+          $$h' = h + \mathrm{LReLU}\bigl(\mathcal{F}_t^{-1}(W^{(k)}\hat h(k))\bigr)$$
+        </div>
+        <div class="eq">
+          <span class="eqlabel">TimeConvX (spectral mixing along $t$, applied independently to each velocity component)</span>
+          $$v'_d(x_i,t) = v_d(x_i,t) + \mathcal{F}_t^{-1}(\tilde W^{(k)}\hat v_d(x_i,k))$$
+        </div>
+        <div class="eq">
+          <span class="eqlabel">EGNN with multi-head edge gate</span>
+          $$\begin{aligned}
+          m_{ij} &= \phi_e(h_i^l,h_j^l,\|x_i-x_j\|^2,a_{ij}) \\
+          \textcolor{#c44e52}{e_{ij}^{(h)}} &\textcolor{#c44e52}{= \sigma(\mathrm{Linear}_h(m_{ij})),\; h = 1,\dots,H} \\
+          m_i &= \textstyle\sum_{j} \textcolor{#c44e52}{\bigl(\tfrac{1}{H}\textstyle\sum_h e_{ij}^{(h)}\bigr)}\, m_{ij} \\
+          h_i^{l+1} &= \mathrm{LayerNorm}(h_i^l + \phi_h(h_i^l, m_i))
+          \end{aligned}$$
+          <span class="eqnote">
+            <strong>Edge features $a_{ij}$</strong> (11 scalars): $\|x_i-x_j\|^2$ plus per-timestep projections $\langle v_i^{(t)}, \hat r_{ij}\rangle$ and $\langle v_j^{(t)}, \hat r_{ij}\rangle$ onto the invariant edge direction $\hat r_{ij}$.
+            The red term is our multi-head edge-gate extension of EGNN <a class="cite" href="#ref3">[3, Eq. 7&ndash;8]</a>. The submitted model uses $H = 1$; widening to $H = 4$ regressed test L2 by 1&ndash;3%.
+          </span>
+        </div>
+        <div class="eq">
+          <span class="eqlabel">Decoder (ours vs EGNN)</span>
+          $$\Delta v_i = \textcolor{#c44e52}{\underbrace{\textstyle\sum_t \alpha_i^{(t)} v_i^{(t)}}_{\text{learned frame blend}}} + \underbrace{\textstyle\sum_j w(m_{ij})(x_j-x_i)}_{\text{EGNN coord update}}$$
+          <span class="eqnote">
+            The first (red) term is our learned per-frame blend. The second follows EGNN's coordinate update <a class="cite" href="#ref3">[3, Eq. 4]</a>. All five output frames are decoded in a single pass, without autoregressive compounding.
+          </span>
+        </div>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">5</span>Target &amp; Loss</h2>
+        <p>Following Reynolds <a class="cite" href="#ref1">[1]</a>, we predict the fluctuation $\Delta v$ against the temporal mean $\bar v$ of the input window.</p>
+        <div class="eq">
+          $$v_{\mathrm{out}}(x_i,t) = \underbrace{\tfrac{1}{T}\textstyle\sum_{t'} v_{\mathrm{in}}(x_i,t')}_{\bar v} + \Delta v(x_i,t)$$
+        </div>
+        <div class="eq">
+          <span class="eqlabel">Per-point MSE</span>
+          $$\mathcal{L} = \tfrac{1}{T}\textstyle\sum_{t=0}^{T-1}\tfrac{1}{N}\textstyle\sum_{i=1}^{N} \|\hat v_{\mathrm{out}}(x_i,t) - v_{\mathrm{out}}(x_i,t)\|_2^{\,2}$$
+        </div>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">6</span>Training Setup</h2>
+        <table class="training-table">
+          <tr><th>Optimizer</th><td>AdamW, lr&nbsp;=&nbsp;2&middot;10&minus;&sup3;, wd&nbsp;=&nbsp;10&minus;&sup2;</td></tr>
+          <tr><th>Schedule</th><td>Linear warmup (15 ep) + cosine</td></tr>
+          <tr><th>Batch</th><td>1 &times; 8 grad-accum (eff. 8)</td></tr>
+          <tr><th>Epochs</th><td>120, patience 30 (val L2)</td></tr>
+          <tr><th>Split (final)</th><td>95 / 2.5 / 2.5%, geometry-stratified</td></tr>
+          <tr><th>Split (ablations)</th><td>70 / 15 / 15% within df&nbsp;0.15, stratified</td></tr>
+          <tr><th>Time emb.</th><td>Sinusoidal <a class="cite" href="#ref2">[2]</a></td></tr>
+          <tr><th>Hardware (final)</th><td>1&times; NVIDIA B200 (180 GB), Modal, ~15 h 37 m</td></tr>
+          <tr><th>Hardware (ablations)</th><td>1&times; NVIDIA L40S, 30 epochs each</td></tr>
+        </table>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">7</span>Results &mdash; Ablations</h2>
+        <p>
+          Each panel isolates one design choice at df = 0.15, where df is the fraction of the 770-file training split used.
+        </p>
+        <figure>
+          <img src="../figures/poster_ablation_grid.png"
+               alt="Four panel bar chart of test L2 for hidden dim, learning rate and gating, temporal mixing, and residual target ablations">
+          <figcaption>Fig. 5. Test L2 per ablation panel. The red bar marks the best variant within each panel.</figcaption>
+        </figure>
+        <ul>
+          <li><strong>Graph topology</strong> <span class="hint">(df = 0.15)</span>. Fixed kNN outperforms UDF-adaptive kNN by 1.6% on test L2.</li>
+          <li><strong>Learning rate</strong> <span class="hint">(df = 0.15)</span>. The more aggressive learning rate improves test L2 by <span class="best">2.6%</span>.</li>
+          <li><strong>Temporal mixing</strong> <span class="hint">(df = 0.15)</span>. Spectral convolution outperforms 1-D time-conv by <span class="best">5.3%</span>.</li>
+          <li><strong>Residual target</strong> <span class="hint">(df = 0.15)</span>. Predicting the Reynolds mean-residual outperforms the last-frame residual by <span class="best">0.7%</span>.</li>
+          <li><strong>Gating, in full gEGNO</strong> <span class="hint">(df = 0.15)</span>. The per-edge gate outperforms the ungated variant by <span class="best">0.73%</span> (1.1151 vs 1.1233).</li>
+          <li><strong>Hidden dim</strong> <span class="hint">(df = 1.0)</span>. Test L2 plateaus at $h = 64$ (1.118). Widening to $h = 96$ lowers val L2 to 0.905 without changing test L2.</li>
+        </ul>
+      </section>
+
+    </div>
+
+    <div class="col">
+
+      <section class="box">
+        <h2><span class="secnum">8</span>Qualitative Analysis of Errors</h2>
+        <h3>Spatial localisation across the rollout</h3>
+        <figure>
+          <img src="../figures/poster_error_rollout.png"
+               alt="3-row 5-column heatmap rollout: MLP (top), EGNN fixed-kNN (middle), gEGNO (bottom) across t=0 to t=4 on sample 1021_1-0, shared colourbar">
+          <figcaption>
+            Fig. 6. Error $\|\hat v - v\|_2$ on sample 1021_1-0, shared
+            colour scale. MLP error saturates everywhere. EGNN clears
+            the free stream but leaves scattered wake noise. gEGNO
+            further localises the residual into a narrow band behind the
+            airfoil. Error grows by roughly $1.4\times$ across the five
+            frames, consistent with one-shot decoding.
+          </figcaption>
+        </figure>
+        <h3>Per-frame error growth across time</h3>
+        <figure>
+          <img src="../figures/poster_horizon_bars.png"
+               alt="Grouped bar chart of per-frame mean L2 error with standard-deviation whiskers for MLP, fixed-kNN EGNN, and gEGNO evaluated on 120 test samples across frames t=0 to t=4.">
+          <figcaption>
+            Fig. 7. Per-frame L2 (mean $\pm$ std across <strong>n = 120</strong>
+            test samples). gEGNO has the lowest error at every timestep. At $t = 4$
+            it reaches 1.15, against 1.43 for EGNN (<span class="best">&minus;20%</span>)
+            and 3.30 for MLP (<span class="best">&minus;65%</span>). Error growth
+            is sub-exponential, consistent with one-shot decoding without
+            autoregressive compounding. Caveat: the test split overlaps with the
+            submission's training geometries, so gEGNO's reported margin is likely
+            optimistic.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="box">
+        <h2><span class="secnum">9</span>Limitations &amp; Outlook</h2>
+        <ul>
+          <li><strong>Gating vs attention.</strong> The per-edge sigmoid is an unnormalised gate. Unlike GAT's softmax over $\mathcal{N}(i)$ <a class="cite" href="#ref14">[14]</a>, it allows selective muting but has no built-in self-regularisation. Inside the full gEGNO stack, gating reduces test L2 by <span class="best">0.73%</span>. A direct comparison to SE(3)-Transformer <a class="cite" href="#ref10">[10]</a> and EquiFormer <a class="cite" href="#ref11">[11]</a> would test whether softmax normalisation outperforms our unnormalised gate.</li>
+          <li><strong>Methodology caveats.</strong> All ablations use a single seed (no confidence intervals) and the 70/15/15 split at df = 0.15. The submission itself was trained at df = 1.0 with a 95/2.5/2.5 split. Effective batch size is 8 via gradient accumulation.</li>
+          <li><strong>Implementation note.</strong> The submitted weights ignore the direction of <span class="mono">udf_gradient</span> (a bug). Only its magnitude reaches the encoder, and that magnitude is identically 1.</li>
+          <li><strong>Under-explored directions.</strong> We fixed depth at $d = 4$ without a principled sweep. The adaptive-kNN scale $\lambda$ could not be swept within GPU memory limits. We did not test equivariant input noise as a symmetry-preserving augmentation.</li>
+          <li><strong>Absolute-coordinate encodings.</strong> Only UDF scalars and edge-direction vectors reach the encoder today. Fourier or rotary features on $(x, y, z)$ would expose global position and may help resolve finer spatial structure.</li>
+        </ul>
+      </section>
+
+      <section class="box refs">
+        <h2>References</h2>
+        <ol>
+          <li id="ref1">Reynolds, O. On the Dynamical Theory of Incompressible Viscous Fluids. <em>Phil. Trans. R. Soc. Lond. A</em>, 186:123&ndash;164, 1895.</li>
+          <li id="ref2">Vaswani, A. et al. Attention Is All You Need. <em>NeurIPS</em>, 2017. <code>arXiv:1706.03762</code>.</li>
+          <li id="ref3">Satorras, V.&nbsp;G., Hoogeboom, E., Welling, M. E(n) Equivariant Graph Neural Networks. <em>ICML</em>, 2021. <code>arXiv:2102.09844</code>.</li>
+          <li id="ref4">Li, Z. et al. Fourier Neural Operator for Parametric PDEs. <em>ICLR</em>, 2021. <code>arXiv:2010.08895</code>.</li>
+          <li id="ref5">Xu, M. et al. Equivariant Graph Neural Operator for Modeling 3D Dynamics. <em>ICML</em>, 2024. <code>arXiv:2401.11037</code>.</li>
+          <li id="ref6">Pfaff, T. et al. Learning Mesh-Based Simulation with Graph Networks. <em>ICLR</em>, 2021. <code>arXiv:2010.03409</code>.</li>
+          <li id="ref7">Sanchez-Gonzalez, A. et al. Learning to Simulate Complex Physics with Graph Networks. <em>ICML</em>, 2020. <code>arXiv:2002.09405</code>.</li>
+          <li id="ref10">Fuchs, F. B. et al. SE(3)-Transformers: 3D Roto-Translation Equivariant Attention Networks. <em>NeurIPS</em>, 2020. <code>arXiv:2006.10503</code>.</li>
+          <li id="ref11">Liao, Y.-L. and Smidt, T. Equiformer: Equivariant Graph Attention Transformer for 3D Atomistic Graphs. <em>ICLR</em>, 2023. <code>arXiv:2206.11990</code>.</li>
+          <li id="ref14">Veli&#269;kovi&#263;, P., Cucurull, G., Casanova, A., Romero, A., Li&ograve;, P., and Bengio, Y. Graph Attention Networks. <em>ICLR</em>, 2018. <code>arXiv:1710.10903</code>.</li>
+        </ol>
+      </section>
+
+      <section class="box">
+        <h2>Acknowledgements</h2>
+        <div class="ack">
+          <p>
+            Thanks to <a href="https://www.linkedin.com/in/emanuele-d-allestro-68a9601a7/"
+              style="color:inherit; text-decoration:none;"><strong>Emanuele D'Allestro</strong></a> for fluid-dynamics discussions that influenced the adaptive-kNN design, and to <strong>Modal</strong> for GPU credits.
+          </p>
+          <div style="display:flex; align-items:center; gap:0.6cm; margin-top:0.1cm;">
+            <a href="https://github.com/Agrover112/iclr-2026/tree/gatedegno"
+               title="github.com/Agrover112/iclr-2026/tree/gatedegno"
+               style="display:inline-block;">
+              <img src="logos/github_lockup.png" alt="Code on GitHub &mdash; Agrover112/iclr-2026 (gatedegno branch)"
+                   style="height:1cm; width:auto; display:block;">
+            </a>
+            <a href="https://modal.com/" title="modal.com"
+               style="display:inline-block;">
+              <img src="logos/modal.png" alt="Modal"
+                   style="height:1cm; width:auto; display:block;">
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+  </div>
+
+  <div class="submit-strip">
+    <strong>Submitted configuration:</strong> gEGNO, h = 96, d = 4 blocks on fixed 16-kNN with the Reynolds mean-residual decoder. Spectral time-mixing with 3 Fourier modes (full length-5 real spectrum).
+  </div>
+
+</section>
+</body>
+</html>
